@@ -1,0 +1,31 @@
+cabal-version:      3.0
+name:               hald
+version:            0.1.0.0
+synopsis: Container-based system update utility
+-- description:
+license:            MIT-0
+license-file:       LICENSE
+author:             fei
+maintainer:         fei@timesink
+-- copyright:
+category:           System
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+executable hald
+    import:           warnings
+    main-is:          Main.hs
+    other-modules:
+        Main.Deployment,
+        Main.Space
+    -- other-extensions:
+    build-depends:
+        base ^>=4.17.2.1,
+        unix,
+        directory
+    hs-source-dirs:   app
+    default-language: GHC2021
