@@ -1,5 +1,9 @@
 module Main.Deployment where
 
+import Control.Exception (IOException, catch)
+import Data.Set qualified as Set
+import Main.Util qualified as Util
+import System.FilePath.Glob
 import System.Posix.Files
 
 data Deployment
@@ -9,19 +13,18 @@ data Deployment
     rootDir :: Maybe FilePath,
     bootComponents :: BootComponents
   }
+  deriving (Show, Eq)
 
 data BootComponents
   = BootComponents
   { bootDir :: Maybe FilePath,
     bootEntry :: Maybe FilePath
   }
-
-newIdentifier :: [Int] -> Int
-newIdentifier = succ . maximum
+  deriving (Show, Eq)
 
 createDeployment :: [Int] -> Deployment
 createDeployment exDeps =
-  let depId = newIdentifier exDeps
+  let depId = Util.newIdentifier exDeps
    in Deployment
         { identifier = depId,
           lockfile = Just (haldPath <> "/." <> show depId),
@@ -40,17 +43,41 @@ getBootComponents :: Int -> IO BootComponents
 getBootComponents depId = do
   let bPath = bootPath <> "/" <> show depId
       bEntry = bootPath <> "/loader/entries/" <> show depId <> ".conf"
-  bPathExists <- fileExist bPath
+  bPathExists <-
+    catch
+      (fileExist bPath)
+      ( \e -> do
+          let _ = show (e :: IOException)
+          return False
+      )
   bPathIsDir <-
     if bPathExists
       then do
         bPathStatus <- getFileStatus bPath
-        let bPathIsDir = isDirectory bPathStatus
-        return bPathIsDir
-      else return False
-  kernelExists <- fileExist (bPath <> "/vmlinuz")
-  initrdExists <- fileExist (bPath <> "/initramfs.img")
-  bEntryExists <- fileExist bEntry
+        return $ isDirectory bPathStatus
+      else
+        return False
+  kernelExists <-
+    catch
+      (fileExist (bPath <> "/vmlinuz"))
+      ( \e -> do
+          let _ = show (e :: IOException)
+          return False
+      )
+  initrdExists <-
+    catch
+      (fileExist (bPath <> "/initramfs.img"))
+      ( \e -> do
+          let _ = show (e :: IOException)
+          return False
+      )
+  bEntryExists <-
+    catch
+      (fileExist bEntry)
+      ( \e -> do
+          let _ = show (e :: IOException)
+          return False
+      )
   return
     BootComponents
       { bootDir =
@@ -70,8 +97,20 @@ getDeployment :: Int -> IO Deployment
 getDeployment depId = do
   let lFile = haldPath <> "/." <> show depId
       rDir = haldPath <> "/" <> show depId
-  lFileExists <- fileExist lFile
-  rDirExists <- fileExist rDir
+  lFileExists <-
+    catch
+      (fileExist lFile)
+      ( \e -> do
+          let _ = show (e :: IOException)
+          return False
+      )
+  rDirExists <-
+    catch
+      (fileExist rDir)
+      ( \e -> do
+          let _ = show (e :: IOException)
+          return False
+      )
   rDirIsDir <-
     if rDirExists
       then do
@@ -87,6 +126,24 @@ getDeployment depId = do
         rootDir = if rDirExists && rDirIsDir then Just rDir else Nothing,
         bootComponents = bComponents
       }
+
+getDeployments :: IO [FilePath]
+getDeployments = do
+  lockfiles <- globDir1 (compile ".[0-9]*") haldPath
+  rootDirs <- globDir1 (compile "[0-9]*") haldPath
+  bootDirs <- globDir1 (compile "[0-9]*") bootPath
+  bootEntrys <- globDir1 (compile "[0-9]*.conf") (bootPath <> "/loader/entries")
+  let lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (haldPath <> "/")) lockfiles
+      rootSet = Set.fromList $ map (Util.removeString (haldPath <> "/")) rootDirs
+      bootDSet = Set.fromList $ map (Util.removeString (bootPath <> "/")) bootDirs
+      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (bootPath <> "/loader/entries/")) bootEntrys
+  return $ Set.toList $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
+
+getDeploymentsInt :: IO [Int]
+getDeploymentsInt = do
+  deployments <- getDeployments
+  let intdeps = map (\d -> read d :: Int) deployments
+  return intdeps
 
 haldPath :: FilePath
 haldPath = "/.ald"

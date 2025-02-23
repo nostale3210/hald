@@ -21,11 +21,16 @@ executable hald
     main-is:          Main.hs
     other-modules:
         Main.Deployment,
-        Main.Space
+        Main.Space,
+        Main.Util
     -- other-extensions:
     build-depends:
+        Glob,
         base ^>=4.17.2.1,
-        unix,
-        directory
-    hs-source-dirs:   app
+        containers,
+        directory,
+        filepath,
+        text,
+        unix
+    hs-source-dirs:   src
     default-language: GHC2021
