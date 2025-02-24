@@ -1,17 +1,18 @@
 module Main where
 
-import Main.Deployment (getDeployment, getDeploymentsInt)
-import Main.Space (gcBroken)
+import Main.Create (createNewDeployment)
+import Main.Deployment (createDeployment, getDeployment, getDeploymentsInt)
 
 main :: IO ()
 main = do
-    depls <- getDeploymentsInt
-    gcBroken depls
+  deployments <- getDeploymentsInt
+  let newDeployment = createDeployment deployments
+  createNewDeployment newDeployment
 
 showDeps :: [Int] -> IO ()
 showDeps depl =
   case depl of
-    [] -> putStrLn "No deployment left."
+    [] -> return ()
     x : xs -> do
       dep <- getDeployment x
       print dep

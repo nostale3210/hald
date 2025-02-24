@@ -20,7 +20,11 @@ executable hald
     import:           warnings
     main-is:          Main.hs
     other-modules:
+        Main.Config,
+        Main.Container,
+        Main.Create,
         Main.Deployment,
+        Main.Fail,
         Main.Space,
         Main.Util
     -- other-extensions:
@@ -30,6 +34,7 @@ executable hald
         containers,
         directory,
         filepath,
+        process,
         text,
         unix
     hs-source-dirs:   src
