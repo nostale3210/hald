@@ -3,23 +3,22 @@ module Main.Space where
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (sort)
-import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.Directory
 
-rmDep :: Dep.Deployment -> IO ()
-rmDep deployment = do
+rmDep :: Dep.Deployment -> FilePath -> FilePath -> FilePath -> IO ()
+rmDep deployment root hp bp = do
   let depId = Dep.identifier deployment
   putStrLn $ "Removing deployment " <> show depId <> "..."
-  tbRmDep <- Dep.getDeployment depId
+  tbRmDep <- Dep.getDeployment depId root hp bp
   let bootComponents = Dep.bootComponents tbRmDep
-  bootPathNoComps <- Util.pathExists (Config.bootPath <> "/" <> show depId)
+  bootPathNoComps <- Util.pathExists (bp <> "/" <> show depId)
   let tbRmBootComponents =
         if bootPathNoComps
           then
             Dep.BootComponents
-              { Dep.bootDir = Just (Config.bootPath <> "/" <> show depId),
+              { Dep.bootDir = Just (bp <> "/" <> show depId),
                 Dep.bootEntry = Dep.bootEntry bootComponents
               }
           else
@@ -41,48 +40,48 @@ rmComponent ident component path =
         )
     Nothing -> putStrLn ("Deployment " <> show ident <> ": No associated " <> component <> ".")
 
-rmDeps :: Int -> [Int] -> IO ()
-rmDeps keepDeps deployments
+rmDeps :: Int -> [Int] -> FilePath -> FilePath -> FilePath -> IO ()
+rmDeps keepDeps deployments root hp bp
   | keepDeps < length (sort deployments) =
       case deployments of
         [] -> return ()
         x : xs -> do
-          tbRmDep <- Dep.getDeployment x
+          tbRmDep <- Dep.getDeployment x root hp bp
 
-          rmDep tbRmDep
-          rmDeps keepDeps xs
-  | otherwise = putStrLn "No deployments to remove."
+          rmDep tbRmDep root hp bp
+          rmDeps keepDeps xs root hp bp
+  | otherwise = putStrLn "No deployments to remove. (gc)"
 
-gcBroken :: [Int] -> IO ()
-gcBroken depIds = do
+gcBroken :: [Int] -> FilePath -> FilePath -> FilePath -> IO ()
+gcBroken depIds root hp bp = do
   case depIds of
     [] -> return ()
     x : xs -> do
-      checkDep x
-      gcBroken xs
+      checkDep x root hp bp
+      gcBroken xs root hp bp
 
-checkDep :: Int -> IO ()
-checkDep depId = do
-  dep <- Dep.getDeployment depId
+checkDep :: Int -> FilePath -> FilePath -> FilePath -> IO ()
+checkDep depId root hp bp = do
+  dep <- Dep.getDeployment depId root hp bp
   let bootComps = Dep.bootComponents dep
   rootDirExists <- componentPresent $ Dep.rootDir dep
   bootDirExists <- componentPresent $ Dep.bootDir bootComps
   bootEntryExists <- componentPresent $ Dep.bootEntry bootComps
   lockfileExists <- componentPresent $ Dep.lockfile dep
-  idFileExists <- Util.pathExists $ Config.haldPath <> "/" <> show depId <> "/usr/.ald_dep"
+  idFileExists <- Util.pathExists $ hp <> "/" <> show depId <> "/usr/.ald_dep"
   if rootDirExists
     && bootDirExists
     && bootEntryExists
     && lockfileExists
     && idFileExists
     then do
-      idFileContent <- readFile $ Config.haldPath <> "/" <> show depId <> "/usr/.ald_dep"
+      idFileContent <- readFile $ hp <> "/" <> show depId <> "/usr/.ald_dep"
       let savedId = read (head $ lines idFileContent) :: Int
       when
         (savedId /= depId)
         $ catch
           ( writeFile
-              (Config.haldPath <> "/" <> show depId <> "/usr/.ald_dep")
+              (hp <> "/" <> show depId <> "/usr/.ald_dep")
               (show depId)
           )
           ( \e -> do
@@ -94,7 +93,7 @@ checkDep depId = do
         then return ()
         else do
           putStrLn $ "Collecting broken deployment " <> show depId <> "..."
-          rmDep dep
+          rmDep dep root hp bp
 
 componentPresent :: Maybe FilePath -> IO Bool
 componentPresent compPath =

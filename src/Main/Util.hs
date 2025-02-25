@@ -67,13 +67,13 @@ recursiveFileSearch rootDir fileName = do
             then recursiveFileSearch path fileName
             else return []
 
-relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
-relabelSeLinuxPath rootPath contexts relabelDir = do
+relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
+relabelSeLinuxPath rootPath contexts relabelDir bp = do
   putStrLn $ "Relabeling " <> relabelDir <> "..."
   catch
     ( callCommand
         ( "restorecon -RF "
-            <> Config.bootPath
+            <> bp
         )
     )
     ( \e -> do

@@ -1,7 +1,6 @@
 module Main.Container where
 
 import Control.Exception (IOException, catch)
-import Main.Config qualified as Config
 import Main.Util qualified as Util
 import System.Process
 
@@ -82,24 +81,24 @@ pullImage podUri = do
         )
       return True
 
-syncImage :: FilePath -> IO ()
-syncImage fp = do
-  Util.ensureDirExists $ Config.haldPath <> "/image"
+syncImage :: FilePath -> FilePath -> IO ()
+syncImage fp hp = do
+  Util.ensureDirExists $ hp <> "/image"
   putStrLn "Syncing image structure..."
-  syncImageStructure fp
+  syncImageStructure fp hp
   putStrLn "Syncing image data..."
-  syncImageBatched fp
+  syncImageBatched fp hp
   putStrLn "Removing leftover image data..."
-  trimImageLeftovers fp
+  trimImageLeftovers fp hp
 
-syncImageStructure :: FilePath -> IO ()
-syncImageStructure fp =
+syncImageStructure :: FilePath -> FilePath -> IO ()
+syncImageStructure fp hp =
   catch
     ( callCommand
         ( "rsync -ac -f\"+ */\" -f\"- *\" --delete "
             <> fp
             <> "/{usr,etc} "
-            <> Config.haldPath
+            <> hp
             <> "/image/ &>/dev/null"
         )
     )
@@ -108,8 +107,8 @@ syncImageStructure fp =
         error err
     )
 
-syncImageBatched :: FilePath -> IO ()
-syncImageBatched fp =
+syncImageBatched :: FilePath -> FilePath -> IO ()
+syncImageBatched fp hp =
   catch
     ( callCommand
         ( "find "
@@ -119,7 +118,7 @@ syncImageBatched fp =
             <> fp
             <> "\\)|\\1/.|g\" | xargs -0 -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
             <> "bash -c 'rsync -aHlcx --delete --relative \"$@\" "
-            <> Config.haldPath
+            <> hp
             <> "/image/ &>/dev/null' _ &>/dev/null"
         )
     )
@@ -128,14 +127,14 @@ syncImageBatched fp =
         error err
     )
 
-trimImageLeftovers :: FilePath -> IO ()
-trimImageLeftovers fp =
+trimImageLeftovers :: FilePath -> FilePath -> IO ()
+trimImageLeftovers fp hp =
   catch
     ( callCommand
         ( "comm -z23 <(find "
-            <> Config.haldPath
+            <> hp
             <> "/image/{usr,etc} -print0 | sed -z \"s|^"
-            <> Config.haldPath
+            <> hp
             <> "/image||g\" | sort -z) "
             <> "<(find "
             <> fp
@@ -143,7 +142,7 @@ trimImageLeftovers fp =
             <> fp
             <> "||g\" | sort -z) | "
             <> "sed -z \"s|^|"
-            <> Config.haldPath
+            <> hp
             <> "/image|g\" | xargs -0 rm -rf &>/dev/null"
         )
     )

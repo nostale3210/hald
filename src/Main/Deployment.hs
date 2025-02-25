@@ -2,7 +2,6 @@ module Main.Deployment where
 
 import Control.Exception (IOException, catch)
 import Data.Set qualified as Set
-import Main.Config qualified as Config
 import Main.Util qualified as Util
 import System.Directory (doesDirectoryExist)
 import System.FilePath.Glob
@@ -27,27 +26,40 @@ data BootComponents
   }
   deriving (Show, Eq)
 
-createDeployment :: [Int] -> Deployment
-createDeployment exDeps =
+createDeployment :: [Int] -> FilePath -> FilePath -> Deployment
+createDeployment exDeps hp bp =
   let depId = Util.newIdentifier exDeps
    in Deployment
         { identifier = depId,
-          lockfile = Just (Config.haldPath <> "/." <> show depId),
-          rootDir = Just (Config.haldPath <> "/" <> show depId),
-          bootComponents = createBootPaths depId
+          lockfile = Just (hp <> "/." <> show depId),
+          rootDir = Just (hp <> "/" <> show depId),
+          bootComponents = createBootPaths depId bp
         }
 
-createBootPaths :: Int -> BootComponents
-createBootPaths depId =
-  BootComponents
-    { bootDir = Just (Config.bootPath <> "/" <> show depId),
-      bootEntry = Just (Config.bootPath <> "/loader/entries/" <> show depId <> ".conf")
+dummyDeployment :: Deployment
+dummyDeployment =
+  Deployment
+    { identifier = -1,
+      lockfile = Nothing,
+      rootDir = Nothing,
+      bootComponents =
+        BootComponents
+          { bootDir = Nothing,
+            bootEntry = Nothing
+          }
     }
 
-getBootComponents :: Int -> IO BootComponents
-getBootComponents depId = do
-  let bPath = Config.bootPath <> "/" <> show depId
-      bEntry = Config.bootPath <> "/loader/entries/" <> show depId <> ".conf"
+createBootPaths :: Int -> FilePath -> BootComponents
+createBootPaths depId bp =
+  BootComponents
+    { bootDir = Just (bp <> "/" <> show depId),
+      bootEntry = Just (bp <> "/loader/entries/" <> show depId <> ".conf")
+    }
+
+getBootComponents :: Int -> FilePath -> IO BootComponents
+getBootComponents depId bp = do
+  let bPath = bp <> "/" <> show depId
+      bEntry = bp <> "/loader/entries/" <> show depId <> ".conf"
   bPathExists <- Util.pathExists bPath
   bPathIsDir <-
     if bPathExists
@@ -73,11 +85,11 @@ getBootComponents depId = do
             else Nothing
       }
 
-getDeployment :: Int -> IO Deployment
-getDeployment depId = do
-  currentDepId <- getCurrentDeploymentId
-  let lFile = Config.haldPath <> "/." <> show depId
-      rDir = if depId == currentDepId then "/usr" else Config.haldPath <> "/" <> show depId
+getDeployment :: Int -> FilePath -> FilePath -> FilePath -> IO Deployment
+getDeployment depId root hp bp = do
+  currentDepId <- getCurrentDeploymentId root
+  let lFile = hp <> "/." <> show depId
+      rDir = if depId == currentDepId then "/usr" else hp <> "/" <> show depId
   lFileExists <- Util.pathExists lFile
   rDirExists <- Util.pathExists rDir
   rDirIsDir <-
@@ -85,7 +97,7 @@ getDeployment depId = do
       then do
         doesDirectoryExist rDir
       else return False
-  bComponents <- getBootComponents depId
+  bComponents <- getBootComponents depId bp
   return
     Deployment
       { identifier = depId,
@@ -94,29 +106,29 @@ getDeployment depId = do
         bootComponents = bComponents
       }
 
-getDeployments :: IO [FilePath]
-getDeployments = do
-  lockfiles <- globDir1 (compile ".[0-9]*") Config.haldPath
-  rootDirs <- globDir1 (compile "[0-9]*") Config.haldPath
-  bootDirs <- globDir1 (compile "[0-9]*") Config.bootPath
-  bootEntrys <- globDir1 (compile "[0-9]*.conf") (Config.bootPath <> "/loader/entries")
-  let lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (Config.haldPath <> "/")) lockfiles
-      rootSet = Set.fromList $ map (Util.removeString (Config.haldPath <> "/")) rootDirs
-      bootDSet = Set.fromList $ map (Util.removeString (Config.bootPath <> "/")) bootDirs
-      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (Config.bootPath <> "/loader/entries/")) bootEntrys
+getDeployments :: FilePath -> FilePath -> IO [FilePath]
+getDeployments hp bp = do
+  lockfiles <- globDir1 (compile ".[0-9]*") hp
+  rootDirs <- globDir1 (compile "[0-9]*") hp
+  bootDirs <- globDir1 (compile "[0-9]*") bp
+  bootEntrys <- globDir1 (compile "[0-9]*.conf") (bp <> "/loader/entries")
+  let lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (hp <> "/")) lockfiles
+      rootSet = Set.fromList $ map (Util.removeString (hp <> "/")) rootDirs
+      bootDSet = Set.fromList $ map (Util.removeString (bp <> "/")) bootDirs
+      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (bp <> "/loader/entries/")) bootEntrys
   return $ Set.toList $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
 
-getDeploymentsInt :: IO [Int]
-getDeploymentsInt = do
-  deployments <- getDeployments
+getDeploymentsInt :: FilePath -> FilePath -> IO [Int]
+getDeploymentsInt hp bp = do
+  deployments <- getDeployments hp bp
   let intdeps = map (\d -> read d :: Int) deployments
   return intdeps
 
-getCurrentDeploymentId :: IO Int
-getCurrentDeploymentId = do
+getCurrentDeploymentId :: FilePath -> IO Int
+getCurrentDeploymentId root = do
   content <-
     catch
-      (readFile "/usr/.ald_dep")
+      (readFile (root <> "/usr/.ald_dep"))
       ( \e -> do
           let err = show (e :: IOException)
           putStrLn $ "Couldn't read deployment ID; " <> err
@@ -124,7 +136,7 @@ getCurrentDeploymentId = do
       )
   return (read (head $ lines content) :: Int)
 
-getDeploymentId :: Int -> IO Int
-getDeploymentId depId = do
-  content <- readFile (Config.haldPath <> "/" <> show depId <> "/usr/.ald_dep")
+getDeploymentId :: Int -> FilePath -> IO Int
+getDeploymentId depId hp = do
+  content <- readFile (hp <> "/" <> show depId <> "/usr/.ald_dep")
   return (read (head $ lines content) :: Int)

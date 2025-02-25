@@ -1,24 +1,55 @@
 module Main.Config where
-haldPath :: FilePath
-haldPath = "dummy/.ald"
 
-bootPath :: FilePath
-bootPath = "dummy/boot"
+data Config
+  = Config
+  { haldPath :: FilePath,
+    bootPath :: FilePath,
+    configPath :: FilePath,
+    containerImage :: String,
+    containerTag :: String,
+    containerUri :: String,
+    localTag :: String,
+    keepDeps :: Int,
+    rootDir :: FilePath
+  }
 
-configPath :: FilePath
-configPath = "/etc/hald"
+defaultConfig :: Config
+defaultConfig =
+  Config
+    { haldPath = "dummy/.ald",
+      bootPath = "dummy/boot",
+      configPath = "dummy/etc/hald",
+      containerImage = "ghcr.io/nostale3210/timesinkc-cosmic-nvidia-ald",
+      containerTag = "latest",
+      containerUri = "",
+      localTag = "localhost/ald-custom",
+      keepDeps = 4,
+      rootDir = ""
+    }
 
-containerImage :: String
-containerImage = "ghcr.io/nostale3210/timesinkc-cosmic-nvidia-ald"
+updateHaldPath :: Config -> FilePath -> Config
+updateHaldPath conf fp = conf {haldPath = fp}
 
-containerTag :: String
-containerTag = "latest"
+updateBootPath :: Config -> FilePath -> Config
+updateBootPath conf fp = conf {bootPath = fp}
 
-containerUri :: String
-containerUri = containerImage <> ":" <> containerTag
+updateConfigPath :: Config -> FilePath -> Config
+updateConfigPath conf fp = conf {configPath = fp}
 
-localTag :: String
-localTag = "localhost/ald-custom"
+updateContainerImage :: Config -> String -> Config
+updateContainerImage conf im = conf {containerImage = im}
 
-discardState :: Bool
-discardState = False
+updateContainerTag :: Config -> String -> Config
+updateContainerTag conf tag = conf {containerTag = tag}
+
+updateContainerUri :: Config -> String -> Config
+updateContainerUri conf uri = conf {containerUri = uri}
+
+updateLocalTag :: Config -> String -> Config
+updateLocalTag conf tag = conf {localTag = tag}
+
+updateKeepDeps :: Config -> Int -> Config
+updateKeepDeps conf deps = conf {keepDeps = deps}
+
+updateRootDir :: Config -> FilePath -> Config
+updateRootDir conf dir = conf {rootDir = dir}

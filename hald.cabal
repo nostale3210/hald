@@ -20,6 +20,8 @@ executable hald
     import:           warnings
     main-is:          Main.hs
     other-modules:
+        Main.Activate,
+        Main.Cli,
         Main.Config,
         Main.Container,
         Main.Create,
@@ -34,6 +36,7 @@ executable hald
         containers,
         directory,
         filepath,
+        optparse-applicative,
         process,
         text,
         unix
