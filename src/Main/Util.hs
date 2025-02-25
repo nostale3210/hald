@@ -2,7 +2,6 @@ module Main.Util where
 
 import Control.Exception.Base (IOException, catch)
 import Control.Monad (forM, unless)
-import Main.Config qualified as Config
 import System.Directory
 import System.Process (callCommand)
 

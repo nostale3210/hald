@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               hald
-version:            0.1.0.0
+version:            0.3.0.0
 synopsis: Container-based system update utility
 -- description:
 license:            MIT-0
@@ -21,12 +21,17 @@ executable hald
     main-is:          Main.hs
     other-modules:
         Main.Activate,
+        Main.Assemble.Activate,
+        Main.Assemble.Create,
+        Main.Assemble.Gc,
+        Main.Assemble.Remove,
         Main.Cli,
         Main.Config,
         Main.Container,
         Main.Create,
         Main.Deployment,
         Main.Fail,
+        Main.Lock,
         Main.Space,
         Main.Util
     -- other-extensions:
@@ -42,3 +47,4 @@ executable hald
         unix
     hs-source-dirs:   src
     default-language: GHC2021
+    ghc-options: -static -O2 -optl-static -optl-pthread

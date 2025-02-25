@@ -50,7 +50,7 @@ rmDeps keepDeps deployments root hp bp
 
           rmDep tbRmDep root hp bp
           rmDeps keepDeps xs root hp bp
-  | otherwise = putStrLn "No deployments to remove. (gc)"
+  | otherwise = return ()
 
 gcBroken :: [Int] -> FilePath -> FilePath -> FilePath -> IO ()
 gcBroken depIds root hp bp = do

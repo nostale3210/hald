@@ -16,9 +16,9 @@ data Config
 defaultConfig :: Config
 defaultConfig =
   Config
-    { haldPath = "dummy/.ald",
-      bootPath = "dummy/boot",
-      configPath = "dummy/etc/hald",
+    { haldPath = "/.ald",
+      bootPath = "/boot",
+      configPath = "/etc/hald",
       containerImage = "ghcr.io/nostale3210/timesinkc-cosmic-nvidia-ald",
       containerTag = "latest",
       containerUri = "",
