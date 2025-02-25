@@ -7,18 +7,19 @@ import Main.Config qualified as Config
 import Main.Container qualified as Cont
 import Main.Deployment qualified as Dep
 import Main.Fail qualified as Fail
+import Main.Space qualified as Space
 import Main.Util qualified as Util
 import System.Directory
 import System.Process
 
 createSkeleton :: Int -> IO ()
 createSkeleton depId = do
-  Util.makeSureDirExists (Config.haldPath <> "/" <> show depId)
-  Util.makeSureDirExists (Config.bootPath <> "/" <> show depId)
+  Util.ensureDirExists (Config.haldPath <> "/" <> show depId)
+  Util.ensureDirExists (Config.bootPath <> "/" <> show depId)
 
 createBootEntry :: Int -> IO ()
 createBootEntry depId = do
-  Util.makeSureDirExists $ Config.bootPath <> "/loader/entries"
+  Util.ensureDirExists $ Config.bootPath <> "/loader/entries"
   bootTemplateExists <- Util.pathExists (Config.haldPath <> "/boot.conf")
   if bootTemplateExists
     then do
@@ -52,6 +53,8 @@ generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
 
 createNewDeployment :: Dep.Deployment -> IO ()
 createNewDeployment deployment = do
+  allDeps <- Dep.getDeploymentsInt
+  Space.gcBroken allDeps
   putStrLn $ "Creating deployment " <> show (Dep.identifier deployment) <> "..."
   containerMount <- Cont.mountContainer "ald-root" Config.containerUri
   Cont.syncImage containerMount
@@ -62,6 +65,14 @@ createNewDeployment deployment = do
   Cont.rmContainer "ald-root"
   placeBootFiles deployment
   createBootEntry $ Dep.identifier deployment
+  Util.relabelSeLinuxPath
+    (Config.haldPath <> "/" <> show (Dep.identifier deployment))
+    ( Config.haldPath
+        <> "/"
+        <> show (Dep.identifier deployment)
+        <> "/etc/selinux/targeted/contexts/files/file_contexts"
+    )
+    (Config.haldPath <> "/" <> show (Dep.identifier deployment))
 
 syncSystemConfig :: Bool -> Int -> IO ()
 syncSystemConfig dropState depId = do
@@ -195,7 +206,7 @@ hardlinkDep deployment = do
         let err = show (e :: IOException)
         Fail.failAndCleanup err deployment
     )
-  Util.makeSureDirExists $ Config.haldPath <> "/" <> show (Dep.identifier deployment) <> "/usr"
+  Util.ensureDirExists $ Config.haldPath <> "/" <> show (Dep.identifier deployment) <> "/usr"
   catch
     ( callCommand
         ( "rsync -aHlx --link-dest=\"../../image/usr/\" "

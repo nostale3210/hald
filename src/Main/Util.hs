@@ -2,7 +2,9 @@ module Main.Util where
 
 import Control.Exception.Base (IOException, catch)
 import Control.Monad (forM, unless)
+import Main.Config qualified as Config
 import System.Directory
+import System.Process (callCommand)
 
 removeString :: String -> String -> String
 removeString mtch = replaceString mtch ""
@@ -37,8 +39,8 @@ pathExists path =
         return False
     )
 
-makeSureDirExists :: FilePath -> IO ()
-makeSureDirExists dir = do
+ensureDirExists :: FilePath -> IO ()
+ensureDirExists dir = do
   dirExistence <- doesDirectoryExist dir
   unless dirExistence $
     catch
@@ -64,3 +66,34 @@ recursiveFileSearch rootDir fileName = do
           if pathIsDir
             then recursiveFileSearch path fileName
             else return []
+
+relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
+relabelSeLinuxPath rootPath contexts relabelDir = do
+  putStrLn $ "Relabeling " <> relabelDir <> "..."
+  catch
+    ( callCommand
+        ( "restorecon -RF "
+            <> Config.bootPath
+        )
+    )
+    ( \e -> do
+        let err = show (e :: IOException)
+        putStrLn "Relabeling boot directory failed."
+        error err
+    )
+  catch
+    ( callCommand
+        ( "setfiles -F -T \"$((\"$(nproc --all)\"/2))\" -r "
+            <> rootPath
+            <> " "
+            <> contexts
+            <> " "
+            <> relabelDir
+            <> " 2>/dev/null"
+        )
+    )
+    ( \e -> do
+        let err = show (e :: IOException)
+        putStrLn "Relabeling root directory failed."
+        error err
+    )

@@ -84,7 +84,7 @@ pullImage podUri = do
 
 syncImage :: FilePath -> IO ()
 syncImage fp = do
-  Util.makeSureDirExists $ Config.haldPath <> "/image"
+  Util.ensureDirExists $ Config.haldPath <> "/image"
   putStrLn "Syncing image structure..."
   syncImageStructure fp
   putStrLn "Syncing image data..."

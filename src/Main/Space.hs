@@ -11,6 +11,7 @@ import System.Directory
 rmDep :: Dep.Deployment -> IO ()
 rmDep deployment = do
   let depId = Dep.identifier deployment
+  putStrLn $ "Removing deployment " <> show depId <> "..."
   tbRmDep <- Dep.getDeployment depId
   let bootComponents = Dep.bootComponents tbRmDep
   bootPathNoComps <- Util.pathExists (Config.bootPath <> "/" <> show depId)
@@ -88,7 +89,12 @@ checkDep depId = do
               let err = show (e :: IOException)
               putStrLn $ "Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err
           )
-    else if Dep.rootDir dep == Just "/usr" then return () else rmDep dep
+    else
+      if Dep.rootDir dep == Just "/usr"
+        then return ()
+        else do
+          putStrLn $ "Collecting broken deployment " <> show depId <> "..."
+          rmDep dep
 
 componentPresent :: Maybe FilePath -> IO Bool
 componentPresent compPath =
