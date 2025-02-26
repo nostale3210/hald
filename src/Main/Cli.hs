@@ -18,6 +18,7 @@ data Command
       }
   | Activate Int
   | Status
+  | Diff Int Int
   | Rm Int
   | Gc
 
@@ -41,7 +42,7 @@ commandOptions =
           <> value "/"
           <> help "Operate on a different root directory"
       )
-    <*> hsubparser (depCommand <> activateCommand <> statusCommand <> rmCommand <> gcCommand)
+    <*> hsubparser (depCommand <> activateCommand <> statusCommand <> diffCommand <> rmCommand <> gcCommand)
 
 depCommand :: Mod CommandFields Command
 depCommand =
@@ -116,3 +117,13 @@ activateOptions =
 statusCommand :: Mod CommandFields Command
 statusCommand =
   command "status" (info (pure Status) (progDesc "Display all deployments and their metadata"))
+
+diffCommand :: Mod CommandFields Command
+diffCommand =
+  command "diff" (info diffOptions (progDesc "Compare two deployments"))
+
+diffOptions :: Parser Command
+diffOptions =
+  Diff
+    <$> option auto (long "from" <> short 'f' <> help "First deployment (optional)" <> value 0 <> metavar "ID")
+    <*> option auto (long "to" <> short 't' <> help "Second deployment (optional)" <> value 0 <> metavar "ID")

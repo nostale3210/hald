@@ -6,6 +6,7 @@ import Main.Assemble.Gc qualified as Asgc
 import Main.Assemble.Remove qualified as Asrm
 import Main.Cli qualified as Cli
 import Main.Config qualified as Config
+import Main.Diff qualified as Diff
 import Main.Status qualified as Status
 import Options.Applicative
 
@@ -20,6 +21,7 @@ assembleAction parser = do
     Cli.Gc -> Asgc.deploymentGcAssembly conf
     Cli.Activate x -> Asac.deploymentActivationAssembly x conf
     Cli.Status -> Status.printDepStati conf
+    Cli.Diff x y -> Diff.printDiff x y "rpm" conf
   where
     conf =
       if Cli.optRootdir parser == "/"

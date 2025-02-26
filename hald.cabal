@@ -30,6 +30,7 @@ executable hald
         Main.Container,
         Main.Create,
         Main.Deployment,
+        Main.Diff,
         Main.Fail,
         Main.Lock,
         Main.Space,
