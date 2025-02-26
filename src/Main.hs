@@ -6,6 +6,7 @@ import Main.Assemble.Gc qualified as Asgc
 import Main.Assemble.Remove qualified as Asrm
 import Main.Cli qualified as Cli
 import Main.Config qualified as Config
+import Main.Status qualified as Status
 import Options.Applicative
 
 main :: IO ()
@@ -14,12 +15,13 @@ main = assembleAction =<< execParser Cli.optsParser
 assembleAction :: Cli.GlobalOpts -> IO ()
 assembleAction parser = do
   case Cli.optCommand parser of
-    Cli.Dep a b c d e f -> Ascr.deploymentCreationAssembly a b c d e f config
-    Cli.Rm x -> Asrm.deploymentErasureAssembly x config
-    Cli.Gc -> Asgc.deploymentGcAssembly config
-    Cli.Activate x -> Asac.deploymentActivationAssembly x config
+    Cli.Dep a b c d e f -> Ascr.deploymentCreationAssembly a b c d e f conf
+    Cli.Rm x -> Asrm.deploymentErasureAssembly x conf
+    Cli.Gc -> Asgc.deploymentGcAssembly conf
+    Cli.Activate x -> Asac.deploymentActivationAssembly x conf
+    Cli.Status -> Status.printDepStati conf
   where
-    config =
+    conf =
       if Cli.optRootdir parser == "/"
         then
           Config.updateContainerUri

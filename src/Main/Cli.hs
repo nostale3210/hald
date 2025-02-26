@@ -17,6 +17,7 @@ data Command
         stateFlag :: Bool
       }
   | Activate Int
+  | Status
   | Rm Int
   | Gc
 
@@ -40,7 +41,7 @@ commandOptions =
           <> value "/"
           <> help "Operate on a different root directory"
       )
-    <*> hsubparser (depCommand <> activateCommand <> rmCommand <> gcCommand)
+    <*> hsubparser (depCommand <> activateCommand <> statusCommand <> rmCommand <> gcCommand)
 
 depCommand :: Mod CommandFields Command
 depCommand =
@@ -111,3 +112,7 @@ activateCommand =
 activateOptions :: Parser Command
 activateOptions =
   Activate <$> argument auto (metavar "ID")
+
+statusCommand :: Mod CommandFields Command
+statusCommand =
+  command "status" (info (pure Status) (progDesc "Display all deployments and their metadata"))

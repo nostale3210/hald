@@ -33,6 +33,7 @@ executable hald
         Main.Fail,
         Main.Lock,
         Main.Space,
+        Main.Status,
         Main.Util
     -- other-extensions:
     build-depends:
