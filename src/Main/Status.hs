@@ -1,7 +1,7 @@
 module Main.Status where
 
 import Control.Exception (IOException, catch)
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, sort)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
@@ -62,6 +62,7 @@ returnKernelVersion fp = do
 printDepStati :: Config.Config -> IO ()
 printDepStati conf = do
   allDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
+  let sortedDeps = sort allDeps
   depList <-
     mapM
       ( \dep -> do
@@ -75,7 +76,7 @@ printDepStati conf = do
             conf
             fullDep
       )
-      allDeps
+      sortedDeps
   putStrLn "Currently retained deployments:"
   printDep (reverse depList) conf
 

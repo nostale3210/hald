@@ -1,9 +1,19 @@
-module Main.Assemble.Activate (deploymentActivationAssembly) where
+module Main.Assemble.Activate where
 
+import Control.Monad (unless)
 import Main.Activate qualified as Activate
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
+import Main.Util qualified as Util
+
+deploymentActivationAssemblyPre :: Int -> Config.Config -> IO ()
+deploymentActivationAssemblyPre newDepId conf = do
+  isRoot <- Util.rootCheck
+  unless isRoot $ error "This action needs elevated privileges!"
+  isLocked <- Util.acquireLock $ Config.configPath conf <> "/.hald.lock"
+  unless isLocked $ error "Couldn't acquire lock!"
+  deploymentActivationAssembly newDepId conf
 
 deploymentActivationAssembly :: Int -> Config.Config -> IO ()
 deploymentActivationAssembly newDepId conf = do

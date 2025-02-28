@@ -60,8 +60,8 @@ pullImage podUri = do
     catch
       (readProcess "podman" ["inspect", "--format", "'{{.Digest}}'", podUri] [])
       ( \e -> do
-          let _ = show (e :: IOException)
-          return ""
+          let err = show (e :: IOException)
+          error err
       )
   upstrDigest <-
     catch

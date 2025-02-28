@@ -42,12 +42,11 @@ rmComponent ident component path =
 
 rmDeps :: Int -> [Int] -> FilePath -> FilePath -> FilePath -> IO ()
 rmDeps keepDeps deployments root hp bp
-  | keepDeps < length (sort deployments) =
-      case deployments of
+  | keepDeps < length deployments =
+      case sort deployments of
         [] -> return ()
         x : xs -> do
           tbRmDep <- Dep.getDeployment x root hp bp
-
           rmDep tbRmDep root hp bp
           rmDeps keepDeps xs root hp bp
   | otherwise = return ()

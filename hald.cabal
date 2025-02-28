@@ -42,6 +42,7 @@ executable hald
         base ^>=4.17.2.1,
         containers,
         directory,
+        filelock,
         filepath,
         optparse-applicative,
         process,

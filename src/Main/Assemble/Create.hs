@@ -1,6 +1,6 @@
-module Main.Assemble.Create (deploymentCreationAssembly) where
+module Main.Assemble.Create where
 
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Main.Assemble.Activate qualified as Asac
 import Main.Assemble.Gc qualified as Asgc
 import Main.Config qualified as Config
@@ -10,6 +10,14 @@ import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import Main.Util qualified as Util
+
+deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> IO ()
+deploymentCreationAssemblyPre act build keep gc up se conf = do
+  isRoot <- Util.rootCheck
+  unless isRoot $ error "This action needs elevated privileges!"
+  isLocked <- Util.acquireLock $ Config.configPath conf <> "/.hald.lock"
+  unless isLocked $ error "Couldn't acquire lock!"
+  deploymentCreationAssembly act build keep gc up se conf
 
 deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> IO ()
 deploymentCreationAssembly act build keep gc up se conf = do

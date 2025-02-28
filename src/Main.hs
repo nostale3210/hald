@@ -18,10 +18,10 @@ assembleAction parser = do
   userConf <- Config.getUserConfig config
   let conf = Config.applyUserConfig config userConf
   case Cli.optCommand parser of
-    Cli.Dep a b c d e f -> Ascr.deploymentCreationAssembly a b c d e f conf
-    Cli.Rm x -> Asrm.deploymentErasureAssembly x conf
-    Cli.Gc -> Asgc.deploymentGcAssembly conf
-    Cli.Activate x -> Asac.deploymentActivationAssembly x conf
+    Cli.Dep a b c d e f -> Ascr.deploymentCreationAssemblyPre a b c d e f conf
+    Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf
+    Cli.Gc -> Asgc.deploymentGcAssemblyPre conf
+    Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf
     Cli.Status -> Status.printDepStati conf
     Cli.Diff x y -> Diff.printDiff x y "rpm" conf
   where
