@@ -3,6 +3,9 @@ module Main.Util where
 import Control.Exception.Base (IOException, catch)
 import Control.Monad (forM, unless)
 import System.Directory
+import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
+import System.FilePath (takeDirectory)
+import System.Posix (getRealUserID)
 import System.Process (callCommand)
 
 removeString :: String -> String -> String
@@ -96,3 +99,24 @@ relabelSeLinuxPath rootPath contexts relabelDir bp = do
         putStrLn "Relabeling root directory failed."
         error err
     )
+
+getUserId :: IO Int
+getUserId = do
+  uid <- getRealUserID
+  return (read (show uid) :: Int)
+
+rootCheck :: IO Bool
+rootCheck = do
+  uid <- getUserId
+  return $ uid == 0
+
+acquireLock :: FilePath -> IO Bool
+acquireLock fp = do
+  ensureDirExists $ takeDirectory fp
+  lockRes <- tryLockFile fp Exclusive
+  case lockRes of
+    Just _ -> return True
+    Nothing -> do
+      putStrLn "Waiting to acquire lock..."
+      _ <- lockFile fp Exclusive
+      return True
