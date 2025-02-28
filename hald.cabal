@@ -3,7 +3,7 @@ name:               hald
 version:            0.3.0.0
 synopsis: Container-based system update utility
 -- description:
-license:            MIT-0
+license:            LicenseRef-GLWTPL
 license-file:       LICENSE
 author:             fei
 maintainer:         fei@timesink

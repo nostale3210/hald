@@ -1,0 +1,115 @@
+name: build-hald-utils
+on:
+  pull_request:
+  #  schedule:
+  #    - cron: '0 0 * * 0'
+  push:
+    branches:
+      - "main"
+    paths:
+      - 'src/**'
+      - 'Containerfile'
+      - '.github/workflows/build-hald.yml'
+      - 'hald.cabal'
+  workflow_dispatch:
+
+env:
+    IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    permissions: 
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+
+    steps: 
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Enable sigstore
+        shell: bash
+        run: |
+          sudo mkdir -p /etc/containers/registries.d
+          sudo touch /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
+          echo "docker:" | sudo tee /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
+          echo "  ${{ env.IMAGE_REGISTRY }}:" | sudo tee -a /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
+          echo "    use-sigstore-attachments: true" | sudo tee -a /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
+
+      - name: Gather environment variables
+        shell: bash
+        run: |
+          echo "IMAGE_NAME=hald-utils" >> $GITHUB_ENV
+
+      - name: Generate tags
+        id: generate-tags
+        shell: bash
+        run: |
+          SRC="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "PR_TAG=${SRC}:pr-${{ github.event.number }}" >> $GITHUB_ENV
+          else
+            echo "DATE_TAG=${SRC}:$(date +%Y%m%d)" >> $GITHUB_ENV
+            echo "LATEST_TAG=${SRC}:latest" >> $GITHUB_ENV
+          fi
+
+      - name: Retrieve keys
+        run: |
+          mkdir -p /tmp/certs || echo "dir exists"
+          echo "${{ secrets.SIGNING_SECRET }}" > /tmp/certs/SIGNING_SECRET.key
+
+      - name: Build image
+        shell: bash
+        run: |
+          podman build --label=org.opencontainers.image.title=ald-utils \
+            --label=org.opencontainers.image.description=ald-utils \
+            --label=org.opencontainers.image.version=main \
+            --pull=newer --tag="localhost/hald-utils" \
+            --target=target \
+            -f ./Containerfile
+
+      - name: Push image
+        shell: bash
+        run: |
+          podman login --username="${{ github.actor }}" --password="${{ secrets.GITHUB_TOKEN }}" ghcr.io
+
+          push_pr() {
+            FAILED=()
+            podman push "localhost/hald-utils" "${{ env.PR_TAG }}" \
+              --compression-format=zstd --tls-verify=true || FAILED+=("PR")
+            if [[ "${{ github.event_name }}" == "pull_request" && "${FAILED[*]}" == *"PR"* ]]; then
+              echo "PR failed!" && return 1
+            else return 0; fi
+          }
+
+          push_tag() {
+            TAG="$1"
+            FAILED=()
+            podman push "localhost/hald-utils" "${TAGS[$TAG]}" \
+              --compression-format=zstd --tls-verify=true \
+              --sign-by-sigstore-private-key=/tmp/certs/SIGNING_SECRET.key || FAILED+=("$TAG")
+            if [[ "${FAILED[*]}" == *"DATE"* && "${{ github.event_name }}" != "pull_request" ]]; then
+              echo "Pushing "${TAGS[$TAG]}" failed!" && return 1
+            elif [[ -n "${{ env.LATEST_TAG }}" && "${FAILED[*]}" == *"LATEST"* ]]; then
+              echo "Pushing "${TAGS[$TAG]}" failed!" && return 1
+            else echo ""${TAGS[$TAG]}" pushed successfully!" && return 0; fi
+          }
+
+          declare -A -r TAGS=(
+            ["DATE"]="${{ env.DATE_TAG }}"
+            ["LATEST"]="${{ env.LATEST_TAG }}"
+          )
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then push_pr;
+          else
+            for TAG in "${!TAGS[@]}"; do
+              for try in {1..3}; do
+                if push_tag "$TAG"; then break; fi
+                echo "Try $try out of 3 exhausted!"
+                sleep 15
+              done
+            done
+          fi
