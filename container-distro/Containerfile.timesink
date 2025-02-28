@@ -1,0 +1,33 @@
+ARG UPSTREAM="${UPSTREAM}"
+
+FROM "${UPSTREAM}"
+
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /hald /usr/bin/hald
+COPY boot/90ald /usr/lib/dracut/modules.d/90ald
+COPY boot/ald-boot.service /usr/lib/systemd/system/ald-boot.service
+COPY boot/ald-boot.sh /usr/libexec/ald-boot.sh
+
+COPY tools/librarizer .
+COPY tools/dep_check .
+
+RUN bash librarizer && \
+    sed "/# Dependencies/r drc_libs" /usr/lib/dracut/modules.d/90ald/module-setup.sh && \
+    sed -i "/# Dependencies/r drc_libs" /usr/lib/dracut/modules.d/90ald/module-setup.sh && \
+    rm -f librarizer drc_libs
+
+RUN bash dep_check && \
+    rm -f dep_check
+
+RUN chmod +x /usr/libexec/ald-boot.sh
+
+RUN sed -i "s/tsd upgrade/hald dep -uzag/g" /usr/libexec/sys-up && \
+    sed -i "s/\"bootc\"/\"hald\"/g" /usr/libexec/sys-up
+
+RUN chmod 4755 /usr/bin/newgidmap && \
+    chmod 4755 /usr/bin/newuidmap
+
+RUN KVER="$(rpm -q kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
+    dracut --no-hostonly --kver "$KVER" --reproducible -v --add "ald" \
+    -f "/usr/lib/modules/$KVER/initramfs.img"
+
+RUN touch /files

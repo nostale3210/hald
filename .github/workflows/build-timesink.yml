@@ -1,16 +1,14 @@
-name: build-hald-utils
+name: build-experimental-timesink-image
 on:
   pull_request:
-  #  schedule:
-  #    - cron: '0 0 * * 0'
+  schedule:
+    - cron: '00 16 * * *'
   push:
     branches:
       - "main"
     paths:
-      - 'src/**'
-      - 'Containerfile'
-      - '.github/workflows/build-hald.yml'
-      - 'hald.cabal'
+      - 'container-distro/*'
+      - '.github/workflows/build-timesink.yml'
   workflow_dispatch:
 
 env:
@@ -19,13 +17,17 @@ env:
 jobs:
   build-and-push:
     name: Build and push image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: 
       contents: read
       packages: write
       id-token: write
     strategy:
       fail-fast: false
+      matrix:
+        image:
+          - timesinkc-cosmic-nvidia-hald
+          - timesinkc-void-hald
 
     steps: 
       - name: Checkout repo
@@ -43,7 +45,17 @@ jobs:
       - name: Gather environment variables
         shell: bash
         run: |
-          echo "IMAGE_NAME=hald-utils" >> $GITHUB_ENV
+          echo "IMAGE_NAME=${{ matrix.image }}" >> $GITHUB_ENV
+          if [[ "${{ matrix.image }}" == "timesinkc-main-hald" ]]; then
+            echo "UPSTREAM=ghcr.io/nostale3210/timesinkc-main:latest" >> $GITHUB_ENV
+            echo "CONTAINERFILE=Containerfile.timesink" >> $GITHUB_ENV
+          elif [[ "${{ matrix.image }}" == "timesinkc-cosmic-nvidia-hald" ]]; then
+            echo "UPSTREAM=ghcr.io/nostale3210/timesinkc-cosmic-nvidia:latest" >> $GITHUB_ENV
+            echo "CONTAINERFILE=Containerfile.timesink" >> $GITHUB_ENV
+          elif [[ "${{ matrix.image }}" == "timesinkc-void-hald" ]]; then
+            echo "UPSTREAM=ghcr.io/void-linux/void-glibc-full:latest" >> $GITHUB_ENV
+            echo "CONTAINERFILE=Containerfile.void" >> $GITHUB_ENV
+          fi
 
       - name: Generate tags
         id: generate-tags
@@ -65,12 +77,12 @@ jobs:
       - name: Build image
         shell: bash
         run: |
-          podman build --label=org.opencontainers.image.title=hald-utils \
-            --label=org.opencontainers.image.description=hald-utils \
+          podman build --label=org.opencontainers.image.title="${{ matrix.image }}" \
+            --label=org.opencontainers.image.description="${{ matrix.image }}" \
             --label=org.opencontainers.image.version=main \
-            --pull=newer --tag="localhost/hald-utils" \
-            --target=target \
-            -f ./Containerfile
+            --build-arg=UPSTREAM="${{ env.UPSTREAM }}" \
+            --pull=newer --tag="localhost/timesink" \
+            -f ./container-distro/"${{ env.CONTAINERFILE }}" ./container-distro/
 
       - name: Push image
         shell: bash
@@ -79,7 +91,7 @@ jobs:
 
           push_pr() {
             FAILED=()
-            podman push "localhost/hald-utils" "${{ env.PR_TAG }}" \
+            podman push "localhost/timesink" "${{ env.PR_TAG }}" \
               --compression-format=zstd --tls-verify=true || FAILED+=("PR")
             if [[ "${{ github.event_name }}" == "pull_request" && "${FAILED[*]}" == *"PR"* ]]; then
               echo "PR failed!" && return 1
@@ -89,7 +101,7 @@ jobs:
           push_tag() {
             TAG="$1"
             FAILED=()
-            podman push "localhost/hald-utils" "${TAGS[$TAG]}" \
+            podman push "localhost/timesink" "${TAGS[$TAG]}" \
               --compression-format=zstd --tls-verify=true \
               --sign-by-sigstore-private-key=/tmp/certs/SIGNING_SECRET.key || FAILED+=("$TAG")
             if [[ "${FAILED[*]}" == *"DATE"* && "${{ github.event_name }}" != "pull_request" ]]; then

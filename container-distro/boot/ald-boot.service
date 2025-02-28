@@ -1,0 +1,21 @@
+[Unit]
+Description=Swap hald deployment on boot
+DefaultDependencies=no
+ConditionKernelCommandLine=ald.boot
+ConditionPathExists=/etc/initrd-release
+After=sysroot.mount
+Requires=sysroot.mount
+Before=initrd-root-fs.target
+OnFailure=emergency.target
+OnFailureJobMode=isolate
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/ald-boot.sh /sysroot
+StandardInput=null
+StandardOutput=journal
+StandardError=journal+console
+RemainAfterExit=yes
+
+[Install]
+WantedBy=initrd-root-fs.target

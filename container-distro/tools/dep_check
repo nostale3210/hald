@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -oue pipefail
+
+MANPAGER=cat
+
+pull_images=(
+    "podman:"
+    "skopeo:"
+)
+declare -n pull_image=pull_images
+
+build_images=(
+    "podman:"
+)
+declare -n build_image=build_images
+
+sync_images=(
+    "comm:"
+    "cut:"
+    "nproc:"
+    "rsync:"
+    "sed:"
+    "sort:"
+    "xargs:"
+)
+declare -n sync_image=sync_images
+
+setup_deps=(
+    "cp:"
+    "find:"
+    "mkdir:"
+    "mount:"
+    "umount:"
+    "podman:"
+    "sleep:"
+)
+declare -n setup_dep=setup_deps
+
+swap_deps=(
+    "man:chattr"
+    "exch:"
+    "mount:"
+    "mv:"
+    "umount:"
+)
+declare -n swap_dep=swap_deps
+
+reset_states=(
+    "cp:"
+)
+declare -n reset_state=reset_states
+
+apply_se_pols=(
+    "nproc:"
+    "sort:"
+    "xargs:"
+)
+declare -n apply_se_pol=apply_se_pols
+
+dedupe_boots=(
+    "hardlink:"
+)
+declare -n dedupe_boot=dedupe_boots
+
+rm_deps=(
+    "mount:"
+    "mountpoint:"
+    "rm:"
+    "umount:"
+)
+declare -n rm_dep=rm_deps
+
+init_alds=(
+    "cp:"
+    "ln:"
+    "mkdir:"
+    "mv:"
+)
+declare -n init_ald=init_alds
+
+up_bootloaders=(
+    "cp:"
+    "exch:"
+    "mkdir:"
+    "podman:"
+    "rm:"
+)
+declare -n up_bootloader=up_bootloaders
+
+funcs=(
+    pull_image
+    build_image
+    sync_image
+    setup_dep
+    swap_dep
+    reset_state
+    apply_se_pol
+    dedupe_boot
+    rm_dep
+    up_bootloader
+)
+
+
+optionals=(
+    "chcon:"
+    "cksum:"
+    "diff:"
+    "man:restorecon"
+    "man:setfiles"
+    "rpm:"
+    "systemd-inhibit:"
+)
+declare -n optional=optionals
+
+
+check_bin() {
+    bin="$(cut -d: -f1 <<< "$1")"
+    cmd="$(cut -d: -f2 <<< "$1" | sed "s/^$/--help/")"
+    local -n fail="$2"
+
+    "$bin" "$cmd" &>/dev/null || \
+        if [[ "$bin" == "man" ]]; then fail+=( "$cmd" ); else fail+=( "$bin" ); fi
+}
+
+check_bins() {
+    local -n function="$1"
+    local -a failed
+    func_name="${!function}"
+    printf "[%s]%s" "${func_name%s}" "${padding:${#func_name}}"
+
+    for bin in "${function[@]}"; do
+        check_bin "$bin" failed
+    done
+    printf "%s\n" "${failed[*]}" | sed "s/^$/-/"
+    if [[ ! -z "${failed[*]}" ]]; then
+        CRITICAL+="${failed[*]} "
+    fi
+}
+
+CRITICAL=""
+
+padding="               "
+missing="Function"
+printf "%s%s" "$missing" "${padding:${#missing}}"
+printf "Missing Binaries\n\n"
+
+for func in "${funcs[@]}"; do
+    check_bins "${func[@]}"
+done
+
+declare -a failed
+func_name="optionals"
+printf "\n[%s]%s" "${func_name%s}" "${padding:${#func_name}}"
+for bin in "${optionals[@]}"; do
+    check_bin "$bin" failed
+done
+printf "%s\n" "${failed[*]}" | sed "s/^$/-/" && printf "\n"
+unset failed
+
+if [[ -z "$CRITICAL" ]]; then
+    printf "No problems detected.\n"
+    exit 0
+else
+    exit 1
+fi

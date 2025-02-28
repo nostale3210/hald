@@ -68,7 +68,7 @@ depOptions =
     <*> flag
       False
       True
-      ( long "dropState"
+      ( long "drop-state"
           <> short 'd'
           <> help "Only keep essential configuration (fstab, passwd,...)"
       )

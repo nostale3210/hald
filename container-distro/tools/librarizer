@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -oue pipefail
+
+bins=(
+    "bash"
+    "cat"
+    "chattr"
+    "dirname"
+    "echo"
+    "exch"
+    "find"
+    "id"
+    "mount"
+    "mountpoint"
+    "mv"
+    "printf"
+    "rm"
+    "umount"
+)
+
+libs=()
+for bin in "${bins[@]}"; do
+    read -ra tl <<< "$(ldd "/usr/bin/$bin" | grep "/" | cut -d"(" -f1 | cut -d">" -f2 |
+        sed "s/^\s*//" | tr "\n" " ")"
+    libs+=( "${tl[@]}" )
+done
+
+inst_mult_arr() {
+    local -n arr="$1"
+    printf "%s\n" "$(printf "%s\n" "${arr[@]}" | sort -u | sed "s/^/inst /")"
+}
+
+printf "%s\n\n%s\n" "$(inst_mult_arr libs)" \
+    "$(inst_mult_arr bins)" | sed "s/^/    /" > drc_libs
