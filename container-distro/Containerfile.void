@@ -23,8 +23,7 @@ RUN bash librarizer && \
 RUN bash dep_check && \
     rm -f dep_check
 
-RUN chmod +x /usr/bin/ald && \
-    chmod +x /usr/libexec/ald-boot.sh
+RUN chmod +x /usr/libexec/ald-boot.sh
 
 RUN chmod 4755 /usr/bin/newgidmap && \
     chmod 4755 /usr/bin/newuidmap

@@ -15,6 +15,8 @@ main = assembleAction =<< execParser Cli.optsParser
 
 assembleAction :: Cli.GlobalOpts -> IO ()
 assembleAction parser = do
+  userConf <- Config.getUserConfig config
+  let conf = Config.applyUserConfig config userConf
   case Cli.optCommand parser of
     Cli.Dep a b c d e f -> Ascr.deploymentCreationAssembly a b c d e f conf
     Cli.Rm x -> Asrm.deploymentErasureAssembly x conf
@@ -23,22 +25,26 @@ assembleAction parser = do
     Cli.Status -> Status.printDepStati conf
     Cli.Diff x y -> Diff.printDiff x y "rpm" conf
   where
-    conf =
+    config =
       if Cli.optRootdir parser == "/"
         then
-          Config.updateContainerUri
+          Config.applyConfigKey
             Config.defaultConfig
-            (Config.containerImage Config.defaultConfig <> ":" <> Config.containerTag Config.defaultConfig)
+            [ "containerUri",
+              Config.containerImage Config.defaultConfig
+                <> ":"
+                <> Config.containerTag Config.defaultConfig
+            ]
         else
-          Config.updateConfigPath
-            ( Config.updateBootPath
-                ( Config.updateHaldPath
-                    ( Config.updateContainerUri
-                        (Config.updateRootDir Config.defaultConfig $ Cli.optRootdir parser)
-                        (Config.containerImage Config.defaultConfig <> ":" <> Config.containerTag Config.defaultConfig)
-                    )
-                    (Cli.optRootdir parser <> Config.haldPath Config.defaultConfig)
-                )
-                (Cli.optRootdir parser <> Config.bootPath Config.defaultConfig)
-            )
-            (Cli.optRootdir parser <> Config.configPath Config.defaultConfig)
+          Config.applyConfigKeys
+            Config.defaultConfig
+            [ ["haldPath", Cli.optRootdir parser <> Config.haldPath Config.defaultConfig],
+              ["bootPath", Cli.optRootdir parser <> Config.bootPath Config.defaultConfig],
+              ["configPath", Cli.optRootdir parser <> Config.configPath Config.defaultConfig],
+              [ "containerUri",
+                Config.containerImage Config.defaultConfig
+                  <> ":"
+                  <> Config.containerTag Config.defaultConfig
+              ],
+              ["rootDir", Cli.optRootdir parser]
+            ]

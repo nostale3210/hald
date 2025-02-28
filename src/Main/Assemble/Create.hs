@@ -33,7 +33,7 @@ deploymentCreationAssembly act build keep gc up se conf = do
         (Config.configPath conf)
     let pbConf =
           if build
-            then Config.updateContainerUri conf $ Config.localTag conf
+            then Config.applyConfigKey conf ["containerUri", Config.localTag conf]
             else conf
     containerMount <- Container.mountContainer "ald-root" $ Config.containerUri pbConf
     Container.syncImage containerMount $ Config.haldPath pbConf

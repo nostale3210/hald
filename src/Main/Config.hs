@@ -1,5 +1,8 @@
 module Main.Config where
 
+import Control.Exception (IOException, catch)
+import Main.Util qualified as Util
+
 data Config
   = Config
   { haldPath :: FilePath,
@@ -12,6 +15,7 @@ data Config
     keepDeps :: Int,
     rootDir :: FilePath
   }
+  deriving (Show)
 
 defaultConfig :: Config
 defaultConfig =
@@ -22,34 +26,64 @@ defaultConfig =
       containerImage = "ghcr.io/nostale3210/timesinkc-cosmic-nvidia-hald",
       containerTag = "latest",
       containerUri = "",
-      localTag = "localhost/ald-custom",
+      localTag = "localhost/hald-custom",
       keepDeps = 4,
       rootDir = ""
     }
 
-updateHaldPath :: Config -> FilePath -> Config
-updateHaldPath conf fp = conf {haldPath = fp}
+getUserConfig :: Config -> IO String
+getUserConfig conf = do
+  configExists <- Util.pathExists $ configPath conf <> "/hald.conf"
+  if configExists
+    then
+      catch
+        (readFile (configPath conf <> "/hald.conf"))
+        ( \e -> do
+            let err = show (e :: IOException)
+            putStrLn $ "Couldn't read config file; " <> err
+            return ""
+        )
+    else return ""
 
-updateBootPath :: Config -> FilePath -> Config
-updateBootPath conf fp = conf {bootPath = fp}
+applyUserConfig :: Config -> String -> Config
+applyUserConfig conf userConf =
+  let confLines = lines userConf
+      confKeys = map words confLines
+   in applyConfigKeys conf confKeys
 
-updateConfigPath :: Config -> FilePath -> Config
-updateConfigPath conf fp = conf {configPath = fp}
+applyConfigKeys :: Config -> [[String]] -> Config
+applyConfigKeys conf confKeys =
+  case confKeys of
+    [] -> conf
+    x : xs -> applyConfigKeys (applyConfigKey conf x) xs
 
-updateContainerImage :: Config -> String -> Config
-updateContainerImage conf im = conf {containerImage = im}
+applyConfigKey :: Config -> [String] -> Config
+applyConfigKey conf configKey = updateSingleKey conf (head configKey) (last configKey)
 
-updateContainerTag :: Config -> String -> Config
-updateContainerTag conf tag = conf {containerTag = tag}
-
-updateContainerUri :: Config -> String -> Config
-updateContainerUri conf uri = conf {containerUri = uri}
-
-updateLocalTag :: Config -> String -> Config
-updateLocalTag conf tag = conf {localTag = tag}
-
-updateKeepDeps :: Config -> Int -> Config
-updateKeepDeps conf deps = conf {keepDeps = deps}
-
-updateRootDir :: Config -> FilePath -> Config
-updateRootDir conf dir = conf {rootDir = dir}
+updateSingleKey :: Config -> String -> String -> Config
+updateSingleKey conf key val =
+  case key of
+    "haldPath" -> conf {haldPath = val}
+    "bootPath" -> conf {bootPath = val}
+    "configPath" -> conf {configPath = val}
+    "containerImage" ->
+      applyConfigKey
+        (conf {containerImage = val})
+        [ "containerUri",
+          val
+            <> ":"
+            <> containerTag conf
+        ]
+    "containerTag" ->
+      applyConfigKey
+        (conf {containerTag = val})
+        [ "containerUri",
+          containerImage conf
+            <> ":"
+            <> val
+        ]
+    "containerUri" -> conf {containerUri = val}
+    "localTag" -> conf {localTag = val}
+    "keepDeps" -> conf {keepDeps = read val :: Int}
+    "rootDir" -> conf {rootDir = val}
+    _ -> conf
