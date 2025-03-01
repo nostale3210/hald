@@ -1,6 +1,9 @@
 module Main.Assemble.Activate where
 
+import Control.Concurrent (forkIO)
+import Control.Concurrent.STM qualified as Stm
 import Control.Monad (unless)
+import Data.ByteString.Char8 qualified as C
 import Main.Activate qualified as Activate
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
@@ -13,11 +16,16 @@ deploymentActivationAssemblyPre newDepId conf = do
   unless isRoot $ error "This action needs elevated privileges!"
   isLocked <- Util.acquireLock $ Config.configPath conf <> "/.hald.lock"
   unless isLocked $ error "Couldn't acquire lock!"
-  deploymentActivationAssembly newDepId conf
+  msgChannel <- Stm.atomically Stm.newTChan
+  let msgCont = Util.MessageContainer {Util.interactive = Config.interactive conf, Util.channel = msgChannel}
+  _ <- forkIO (Util.printChannelMsg (Util.channel msgCont) $ C.pack "|/-\\")
+  deploymentActivationAssembly newDepId conf msgCont
 
-deploymentActivationAssembly :: Int -> Config.Config -> IO ()
-deploymentActivationAssembly newDepId conf = do
-  putStrLn $ "Activating deployment " <> show newDepId <> "..."
+deploymentActivationAssembly :: Int -> Config.Config -> Util.MessageContainer -> IO ()
+deploymentActivationAssembly newDepId conf msgCont = do
+  Util.printInfo ("Activating deployment " <> show newDepId <> "...") (Util.interactive msgCont)
+  Util.printProgress msgCont ("Activating deployment " <> show newDepId <> "...")
+
   newDep <-
     Dep.getDeployment
       newDepId

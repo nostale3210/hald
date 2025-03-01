@@ -29,7 +29,7 @@ umountContainer podName =
     )
     ( \e -> do
         let err = show (e :: IOException)
-        putStrLn $ "Unmounting container " <> podName <> " unsuccessful; " <> err
+        Util.printInfo ("Unmounting container " <> podName <> " unsuccessful; " <> err) False
     )
 
 rmContainer :: String -> IO ()
@@ -40,7 +40,7 @@ rmContainer podName =
     )
     ( \e -> do
         let err = show (e :: IOException)
-        putStrLn $ "Removing container " <> podName <> " unsuccessful; " <> err
+        Util.printInfo ("Removing container " <> podName <> " unsuccessful; " <> err) False
     )
 
 buildImage :: String -> String -> FilePath -> IO ()
@@ -84,11 +84,8 @@ pullImage podUri = do
 syncImage :: FilePath -> FilePath -> IO ()
 syncImage fp hp = do
   Util.ensureDirExists $ hp <> "/image"
-  putStrLn "Syncing image structure..."
   syncImageStructure fp hp
-  putStrLn "Syncing image data..."
   syncImageBatched fp hp
-  putStrLn "Removing leftover image data..."
   trimImageLeftovers fp hp
 
 syncImageStructure :: FilePath -> FilePath -> IO ()
@@ -108,24 +105,27 @@ syncImageStructure fp hp =
     )
 
 syncImageBatched :: FilePath -> FilePath -> IO ()
-syncImageBatched fp hp =
-  catch
-    ( callCommand
-        ( "find "
-            <> fp
-            <> "/{usr,etc} ! -type d -printf \"%s\\t%p\\0\" | sort -znr | cut -z -f2- | "
-            <> "sed -z \"s|^\\("
-            <> fp
-            <> "\\)|\\1/.|g\" | xargs -0 -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
-            <> "bash -c 'rsync -aHlcx --delete --relative \"$@\" "
-            <> hp
-            <> "/image/ &>/dev/null' _ &>/dev/null"
-        )
-    )
-    ( \e -> do
-        let err = show (e :: IOException)
-        error err
-    )
+syncImageBatched fp hp = do
+  pHandle <-
+    catch
+      ( spawnCommand
+          ( "find "
+              <> fp
+              <> "/{usr,etc} ! -type d -printf \"%s\\t%p\\0\" | sort -znr | cut -z -f2- | "
+              <> "sed -z \"s|^\\("
+              <> fp
+              <> "\\)|\\1/.|g\" | xargs -0 -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
+              <> "bash -c 'rsync -aHlcx --delete --relative \"$@\" "
+              <> hp
+              <> "/image/ &>/dev/null' _ &>/dev/null"
+          )
+      )
+      ( \e -> do
+          let err = show (e :: IOException)
+          error err
+      )
+  _ <- waitForProcess pHandle
+  return ()
 
 trimImageLeftovers :: FilePath -> FilePath -> IO ()
 trimImageLeftovers fp hp =

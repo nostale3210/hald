@@ -1,12 +1,18 @@
 module Main.Util where
 
+import Control.Concurrent qualified as Conc
+import Control.Concurrent.STM qualified as Stm
 import Control.Exception.Base (IOException, catch)
-import Control.Monad (forM, unless)
+import Control.Monad (forM, unless, when)
+import Data.ByteString.Char8 qualified as C
 import System.Directory
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
-import System.FilePath (takeDirectory, takeFileName)
+import System.FilePath (takeDirectory)
 import System.Posix (getRealUserID)
 import System.Process (callCommand)
+
+data MessageContainer
+  = MessageContainer {interactive :: Bool, channel :: Stm.TChan String}
 
 removeString :: String -> String -> String
 removeString mtch = replaceString mtch ""
@@ -49,7 +55,7 @@ ensureDirExists dir = do
       (createDirectoryIfMissing True dir)
       ( \e -> do
           let err = show (e :: IOException)
-          putStrLn ("Couldn't create missing directory " <> dir <> "; " <> err)
+          printInfo ("Couldn't create missing directory " <> dir <> "; " <> err) False
       )
 
 recursiveFileSearch :: FilePath -> FilePath -> IO [FilePath]
@@ -71,7 +77,6 @@ recursiveFileSearch rootDir fileName = do
 
 relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
 relabelSeLinuxPath rootPath contexts relabelDir bp = do
-  putStrLn $ "Relabeling deployment " <> takeFileName relabelDir <> "..."
   catch
     ( callCommand
         ( "restorecon -RF "
@@ -80,7 +85,7 @@ relabelSeLinuxPath rootPath contexts relabelDir bp = do
     )
     ( \e -> do
         let err = show (e :: IOException)
-        putStrLn "Relabeling boot directory failed."
+        printInfo "Relabeling boot directory failed." False
         error err
     )
   catch
@@ -96,7 +101,7 @@ relabelSeLinuxPath rootPath contexts relabelDir bp = do
     )
     ( \e -> do
         let err = show (e :: IOException)
-        putStrLn "Relabeling root directory failed."
+        printInfo "Relabeling root directory failed." False
         error err
     )
 
@@ -120,3 +125,37 @@ acquireLock fp = do
       putStrLn "Waiting to acquire lock..."
       _ <- lockFile fp Exclusive
       return True
+
+checkInteractive :: IO Bool
+checkInteractive =
+  catch
+    ( do
+        callCommand
+          "{ infocmp 2>/dev/null | grep -q smcup ; } && { infocmp 2>/dev/null | grep -q rmcup ; }"
+        return True
+    )
+    ( \e -> do
+        let _ = show (e :: IOException)
+        return False
+    )
+
+printProgress :: MessageContainer -> String -> IO ()
+printProgress msgCont status = do
+  if interactive msgCont
+    then Stm.atomically $ Stm.writeTChan (channel msgCont) status
+    else putStrLn $ "[Progress] " <> status
+
+printInfo :: String -> Bool -> IO ()
+printInfo status interactive =
+  if interactive
+    then putStrLn $ "\r\ESC[K[Info] " <> status
+    else putStrLn $ "[Info] " <> status
+
+printChannelMsg :: Stm.TChan String -> C.ByteString -> IO ()
+printChannelMsg channel bar = do
+  status <- Stm.atomically $ Stm.readTChan channel
+  C.putStr $! C.pack "\r\ESC[K[" <> C.pack [C.head bar] <> C.pack "] " <> C.pack status
+  Conc.threadDelay 100000
+  channelEmpty <- Stm.atomically $ Stm.isEmptyTChan channel
+  when channelEmpty (Stm.atomically $ Stm.unGetTChan channel status)
+  printChannelMsg channel (C.append (C.tail bar) (C.pack [C.head bar]))

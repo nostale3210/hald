@@ -13,9 +13,9 @@ data Config
     containerUri :: String,
     localTag :: String,
     keepDeps :: Int,
-    rootDir :: FilePath
+    rootDir :: FilePath,
+    interactive :: Bool
   }
-  deriving (Show)
 
 defaultConfig :: Config
 defaultConfig =
@@ -28,7 +28,8 @@ defaultConfig =
       containerUri = "",
       localTag = "localhost/hald-custom",
       keepDeps = 4,
-      rootDir = ""
+      rootDir = "",
+      interactive = False
     }
 
 getUserConfig :: Config -> IO String
@@ -86,4 +87,5 @@ updateSingleKey conf key val =
     "localTag" -> conf {localTag = val}
     "keepDeps" -> conf {keepDeps = read val :: Int}
     "rootDir" -> conf {rootDir = val}
+    "interactive" -> conf {interactive = read val :: Bool}
     _ -> conf

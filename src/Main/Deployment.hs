@@ -131,7 +131,7 @@ getCurrentDeploymentId root = do
       (readFile (root <> "/usr/.ald_dep"))
       ( \e -> do
           let err = show (e :: IOException)
-          putStrLn $ "Couldn't read deployment ID; " <> err
+          Util.printInfo ("Couldn't read deployment ID; " <> err) False
           return "0"
       )
   return (read (head $ lines content) :: Int)

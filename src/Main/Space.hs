@@ -3,22 +3,31 @@ module Main.Space where
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (sort)
+import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.Directory
 
-rmDep :: Dep.Deployment -> FilePath -> FilePath -> FilePath -> IO ()
-rmDep deployment root hp bp = do
+rmDep :: Dep.Deployment -> Config.Config -> IO ()
+rmDep deployment conf = do
+  Util.printInfo
+    ("Removing deployment " <> show (Dep.identifier deployment) <> "...")
+    (Config.interactive conf)
+
   let depId = Dep.identifier deployment
-  putStrLn $ "Removing deployment " <> show depId <> "..."
-  tbRmDep <- Dep.getDeployment depId root hp bp
+  tbRmDep <-
+    Dep.getDeployment
+      depId
+      (Config.rootDir conf)
+      (Config.haldPath conf)
+      (Config.bootPath conf)
   let bootComponents = Dep.bootComponents tbRmDep
-  bootPathNoComps <- Util.pathExists (bp <> "/" <> show depId)
+  bootPathNoComps <- Util.pathExists (Config.bootPath conf <> "/" <> show depId)
   let tbRmBootComponents =
         if bootPathNoComps
           then
             Dep.BootComponents
-              { Dep.bootDir = Just (bp <> "/" <> show depId),
+              { Dep.bootDir = Just (Config.bootPath conf <> "/" <> show depId),
                 Dep.bootEntry = Dep.bootEntry bootComponents
               }
           else
@@ -36,63 +45,75 @@ rmComponent ident component path =
         (removePathForcibly p)
         ( \e -> do
             let err = show (e :: IOException)
-            putStrLn ("Couldn't remove " <> show ident <> " " <> component <> "; " <> err)
+            Util.printInfo ("Couldn't remove " <> show ident <> " " <> component <> "; " <> err) False
         )
-    Nothing -> putStrLn ("Deployment " <> show ident <> ": No associated " <> component <> ".")
+    Nothing ->
+      Util.printInfo
+        ("Deployment " <> show ident <> ": No associated " <> component <> ".")
+        False
 
-rmDeps :: Int -> [Int] -> FilePath -> FilePath -> FilePath -> IO ()
-rmDeps keepDeps deployments root hp bp
+rmDeps :: Int -> [Int] -> Config.Config -> IO ()
+rmDeps keepDeps deployments conf
   | keepDeps < length deployments =
       case sort deployments of
         [] -> return ()
         x : xs -> do
-          tbRmDep <- Dep.getDeployment x root hp bp
-          rmDep tbRmDep root hp bp
-          rmDeps keepDeps xs root hp bp
+          tbRmDep <-
+            Dep.getDeployment
+              x
+              (Config.rootDir conf)
+              (Config.haldPath conf)
+              (Config.bootPath conf)
+          rmDep tbRmDep conf
+          rmDeps keepDeps xs conf
   | otherwise = return ()
 
-gcBroken :: [Int] -> FilePath -> FilePath -> FilePath -> IO ()
-gcBroken depIds root hp bp = do
+gcBroken :: [Int] -> Config.Config -> IO ()
+gcBroken depIds conf = do
   case depIds of
     [] -> return ()
     x : xs -> do
-      checkDep x root hp bp
-      gcBroken xs root hp bp
+      checkDep x conf
+      gcBroken xs conf
 
-checkDep :: Int -> FilePath -> FilePath -> FilePath -> IO ()
-checkDep depId root hp bp = do
-  dep <- Dep.getDeployment depId root hp bp
+checkDep :: Int -> Config.Config -> IO ()
+checkDep depId conf = do
+  dep <- Dep.getDeployment depId (Config.rootDir conf) (Config.haldPath conf) (Config.bootPath conf)
   let bootComps = Dep.bootComponents dep
   rootDirExists <- componentPresent $ Dep.rootDir dep
   bootDirExists <- componentPresent $ Dep.bootDir bootComps
   bootEntryExists <- componentPresent $ Dep.bootEntry bootComps
   lockfileExists <- componentPresent $ Dep.lockfile dep
-  idFileExists <- Util.pathExists $ hp <> "/" <> show depId <> "/usr/.ald_dep"
+  idFileExists <- Util.pathExists $ Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep"
   if rootDirExists
     && bootDirExists
     && bootEntryExists
     && lockfileExists
     && idFileExists
     then do
-      idFileContent <- readFile $ hp <> "/" <> show depId <> "/usr/.ald_dep"
+      idFileContent <- readFile $ Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep"
       let savedId = read (head $ lines idFileContent) :: Int
       when
         (savedId /= depId)
         $ catch
           ( writeFile
-              (hp <> "/" <> show depId <> "/usr/.ald_dep")
+              (Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep")
               (show depId)
           )
           ( \e -> do
               let err = show (e :: IOException)
-              putStrLn $ "Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err
+              Util.printInfo
+                ("Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err)
+                (Config.interactive conf)
           )
     else
       if Dep.rootDir dep == Just "/usr"
         then return ()
         else do
-          putStrLn $ "Collecting broken deployment " <> show depId <> "..."
-          rmDep dep root hp bp
+          Util.printInfo
+            ("Collecting broken deployment " <> show depId <> "...")
+            (Config.interactive conf)
+          rmDep dep conf
 
 componentPresent :: Maybe FilePath -> IO Bool
 componentPresent compPath =

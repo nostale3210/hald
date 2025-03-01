@@ -8,6 +8,7 @@ import Main.Cli qualified as Cli
 import Main.Config qualified as Config
 import Main.Diff qualified as Diff
 import Main.Status qualified as Status
+import Main.Util qualified as Util
 import Options.Applicative
 
 main :: IO ()
@@ -16,7 +17,12 @@ main = assembleAction =<< execParser Cli.optsParser
 assembleAction :: Cli.GlobalOpts -> IO ()
 assembleAction parser = do
   userConf <- Config.getUserConfig config
-  let conf = Config.applyUserConfig config userConf
+  interactive <- Util.checkInteractive
+  let config' =
+        if interactive
+          then Config.applyConfigKey config ["interactive", show interactive]
+          else config
+  let conf = Config.applyUserConfig config' userConf
   case Cli.optCommand parser of
     Cli.Dep a b c d e f -> Ascr.deploymentCreationAssemblyPre a b c d e f conf
     Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf

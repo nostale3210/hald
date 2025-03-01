@@ -40,14 +40,16 @@ executable hald
     build-depends:
         Glob,
         base ^>=4.17.2.1,
+        bytestring,
         containers,
         directory,
         filelock,
         filepath,
         optparse-applicative,
         process,
+        stm,
         text,
         unix
     hs-source-dirs:   src
     default-language: GHC2021
-    ghc-options: -static -O2 -optl-static -optl-pthread
+    ghc-options: -static -O2 -optl-static -optl-pthread -threaded

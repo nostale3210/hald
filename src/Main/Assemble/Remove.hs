@@ -19,5 +19,5 @@ deploymentErasureAssembly :: Int -> Config.Config -> IO ()
 deploymentErasureAssembly depId conf = do
   tbRmDep <- Dep.getDeployment depId (Config.rootDir conf) (Config.haldPath conf) (Config.bootPath conf)
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
-  Space.rmDep tbRmDep (Config.rootDir conf) (Config.haldPath conf) (Config.bootPath conf)
+  Space.rmDep tbRmDep conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
