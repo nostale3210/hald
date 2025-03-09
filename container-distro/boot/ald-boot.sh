@@ -12,6 +12,4 @@ mount -o remount,rw "$sysroot"
 [ ! -d "$sysroot/usr" ] && mkdir -p "$sysroot/usr"
 [ ! -d "$sysroot/etc" ] && mkdir -p "$sysroot/etc"
 
-printf "Activating deployment: $ald_boot"
-
 hald activate "$ald_boot" --rootd "$sysroot"

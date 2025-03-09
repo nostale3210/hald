@@ -88,12 +88,14 @@ jobs:
       - name: Push image
         shell: bash
         run: |
+          COMPRESSION_FORMAT="zstd:chunked"
+
           podman login --username="${{ github.actor }}" --password="${{ secrets.GITHUB_TOKEN }}" ghcr.io
 
           push_pr() {
             FAILED=()
             podman push "localhost/timesink" "${{ env.PR_TAG }}" \
-              --compression-format=zstd --tls-verify=true || FAILED+=("PR")
+              --compression-format="$COMPRESSION_FORMAT" --tls-verify=true || FAILED+=("PR")
             if [[ "${{ github.event_name }}" == "pull_request" && "${FAILED[*]}" == *"PR"* ]]; then
               echo "PR failed!" && return 1
             else return 0; fi
@@ -103,7 +105,7 @@ jobs:
             TAG="$1"
             FAILED=()
             podman push "localhost/timesink" "${TAGS[$TAG]}" \
-              --compression-format=zstd --tls-verify=true \
+              --compression-format="$COMPRESSION_FORMAT" --tls-verify=true \
               --sign-by-sigstore-private-key=/tmp/certs/SIGNING_SECRET.key || FAILED+=("$TAG")
             if [[ "${FAILED[*]}" == *"DATE"* && "${{ github.event_name }}" != "pull_request" ]]; then
               echo "Pushing "${TAGS[$TAG]}" failed!" && return 1
