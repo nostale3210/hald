@@ -3,18 +3,16 @@ module Main.Activate where
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Main.Deployment qualified as Dep
-import Main.Fail qualified as Fail
 import Main.Util qualified as Util
 import System.Directory
+import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand)
 
 getNewRoot :: Dep.Deployment -> IO FilePath
 getNewRoot nextDep =
   case Dep.rootDir nextDep of
     Nothing -> do
-      Fail.failAndCleanup
-        ("Deployment " <> show (Dep.identifier nextDep) <> " is defective")
-        Dep.dummyDeployment
+      raiseSignal sigTERM
       return "Defective"
     Just x -> return x
 
@@ -30,7 +28,8 @@ exchPaths oldPath newPath =
     )
     ( \e -> do
         let err = show (e :: IOException)
-        Fail.failAndCleanup err Dep.dummyDeployment
+        putStrLn err
+        raiseSignal sigTERM
     )
 
 movePath :: FilePath -> FilePath -> IO ()
@@ -39,7 +38,8 @@ movePath oldPath newPath =
     (renameDirectory oldPath newPath)
     ( \e -> do
         let err = show (e :: IOException)
-        Fail.failAndCleanup err Dep.dummyDeployment
+        putStrLn err
+        raiseSignal sigTERM
     )
 
 activateNewRoot :: FilePath -> Dep.Deployment -> FilePath -> IO ()

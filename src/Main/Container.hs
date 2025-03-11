@@ -2,6 +2,7 @@ module Main.Container where
 
 import Control.Exception (IOException, catch)
 import Main.Util qualified as Util
+import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process
 
 mountContainer :: String -> String -> IO FilePath
@@ -29,7 +30,7 @@ umountContainer podName =
     )
     ( \e -> do
         let err = show (e :: IOException)
-        Util.printInfo ("Unmounting container " <> podName <> " unsuccessful; " <> err) False
+        Util.printInfo ("Unmounting container " <> podName <> " unsuccessful\n" <> err) False
     )
 
 rmContainer :: String -> IO ()
@@ -40,7 +41,7 @@ rmContainer podName =
     )
     ( \e -> do
         let err = show (e :: IOException)
-        Util.printInfo ("Removing container " <> podName <> " unsuccessful; " <> err) False
+        Util.printInfo ("Removing container " <> podName <> " unsuccessful\n" <> err) False
     )
 
 buildImage :: String -> String -> FilePath -> IO ()
@@ -50,8 +51,8 @@ buildImage podUri locTag confPath =
         ("podman build --build-arg=SOURCE_IMAGE=" <> podUri <> " -t " <> locTag <> " " <> confPath)
     )
     ( \e -> do
-        let err = show (e :: IOException)
-        error err
+        let _ = show (e :: IOException)
+        raiseSignal sigTERM
     )
 
 pullImage :: String -> IO Bool
@@ -76,8 +77,8 @@ pullImage podUri = do
       catch
         (callCommand ("podman pull " <> podUri))
         ( \e -> do
-            let err = show (e :: IOException)
-            error err
+            let _ = show (e :: IOException)
+            raiseSignal sigTERM
         )
       return True
 
@@ -100,32 +101,29 @@ syncImageStructure fp hp =
         )
     )
     ( \e -> do
-        let err = show (e :: IOException)
-        error err
+        let _ = show (e :: IOException)
+        raiseSignal sigTERM
     )
 
 syncImageBatched :: FilePath -> FilePath -> IO ()
 syncImageBatched fp hp = do
-  pHandle <-
-    catch
-      ( spawnCommand
-          ( "find "
-              <> fp
-              <> "/{usr,etc} ! -type d -printf \"%s\\t%p\\0\" | sort -znr | cut -z -f2- | "
-              <> "sed -z \"s|^\\("
-              <> fp
-              <> "\\)|\\1/.|g\" | xargs -0 -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
-              <> "bash -c 'rsync -aHlcx --delete --relative \"$@\" "
-              <> hp
-              <> "/image/ &>/dev/null' _ &>/dev/null"
-          )
-      )
-      ( \e -> do
-          let err = show (e :: IOException)
-          error err
-      )
-  _ <- waitForProcess pHandle
-  return ()
+  catch
+    ( callCommand
+        ( "find "
+            <> fp
+            <> "/{usr,etc} ! -type d -printf \"%s\\t%p\\0\" | sort -znr | cut -z -f2- | "
+            <> "sed -z \"s|^\\("
+            <> fp
+            <> "\\)|\\1/.|g\" | xargs -0 -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
+            <> "bash -c 'rsync -aHlcx --delete --relative \"$@\" "
+            <> hp
+            <> "/image/ &>/dev/null' _ &>/dev/null"
+        )
+    )
+    ( \e -> do
+        let _ = show (e :: IOException)
+        raiseSignal sigTERM
+    )
 
 trimImageLeftovers :: FilePath -> FilePath -> IO ()
 trimImageLeftovers fp hp =
@@ -147,6 +145,6 @@ trimImageLeftovers fp hp =
         )
     )
     ( \e -> do
-        let err = show (e :: IOException)
-        error err
+        let _ = show (e :: IOException)
+        raiseSignal sigTERM
     )

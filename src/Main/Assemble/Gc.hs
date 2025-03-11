@@ -1,24 +1,17 @@
 module Main.Assemble.Gc where
 
-import Control.Concurrent (forkIO)
-import Control.Concurrent.STM qualified as Stm
-import Control.Monad (unless)
-import Data.ByteString.Char8 qualified as C
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
+import Main.Fail qualified as Fail
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import Main.Util qualified as Util
+import System.Posix.Signals (sigINT, sigTERM)
 
 deploymentGcAssemblyPre :: Config.Config -> IO ()
 deploymentGcAssemblyPre conf = do
-  isRoot <- Util.rootCheck
-  unless isRoot $ error "This action needs elevated privileges!"
-  isLocked <- Util.acquireLock $ Config.configPath conf <> "/.hald.lock"
-  unless isLocked $ error "Couldn't acquire lock!"
-  msgChannel <- Stm.atomically Stm.newTChan
-  let msgCont = Util.MessageContainer {Util.interactive = Config.interactive conf, Util.channel = msgChannel}
-  _ <- forkIO (Util.printChannelMsg (Util.channel msgCont) $ C.pack "|/-\\")
+  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf)
+  Fail.installGenericHandler [sigINT, sigTERM] conf Nothing
   deploymentGcAssembly conf msgCont
 
 deploymentGcAssembly :: Config.Config -> Util.MessageContainer -> IO ()

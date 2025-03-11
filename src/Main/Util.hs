@@ -1,5 +1,6 @@
 module Main.Util where
 
+import Control.Concurrent (forkIO)
 import Control.Concurrent qualified as Conc
 import Control.Concurrent.STM qualified as Stm
 import Control.Exception.Base (IOException, catch)
@@ -125,6 +126,19 @@ acquireLock fp = do
       putStrLn "Waiting to acquire lock..."
       _ <- lockFile fp Exclusive
       return True
+
+genericRootfulPreproc :: FilePath -> Bool -> IO MessageContainer
+genericRootfulPreproc lockPath interactive = do
+  isRoot <- rootCheck
+  unless isRoot $ error "This action needs elevated privileges!"
+
+  isLocked <- acquireLock lockPath
+  unless isLocked $ error "Couldn't acquire lock!"
+
+  msgChannel <- Stm.atomically Stm.newTChan
+  let msgCont = MessageContainer {interactive = interactive, channel = msgChannel}
+  _ <- forkIO (printChannelMsg (channel msgCont) $ C.pack "|/-\\")
+  return msgCont
 
 checkInteractive :: IO Bool
 checkInteractive =

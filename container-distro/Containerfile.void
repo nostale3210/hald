@@ -32,5 +32,3 @@ RUN KVER="$(ls /usr/lib/modules | tr " " "\n" | sort -n | tail -n1)" && \
     mv /boot/*vmlinuz* /usr/lib/modules/$KVER/vmlinuz && \
     dracut --no-hostonly --kver "$KVER" --reproducible -v --add "ald" \
     -f "/usr/lib/modules/$KVER/initramfs.img"
-
-RUN touch /files

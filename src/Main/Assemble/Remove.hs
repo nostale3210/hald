@@ -1,23 +1,23 @@
 module Main.Assemble.Remove where
 
-import Control.Monad (unless)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
+import Main.Fail qualified as Fail
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import Main.Util qualified as Util
+import System.Posix.Signals (sigINT, sigTERM)
 
 deploymentErasureAssemblyPre :: Int -> Config.Config -> IO ()
 deploymentErasureAssemblyPre depId conf = do
-  isRoot <- Util.rootCheck
-  unless isRoot $ error "This action needs elevated privileges!"
-  isLocked <- Util.acquireLock $ Config.configPath conf <> "/.hald.lock"
-  unless isLocked $ error "Couldn't acquire lock!"
+  _ <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf)
   deploymentErasureAssembly depId conf
 
 deploymentErasureAssembly :: Int -> Config.Config -> IO ()
 deploymentErasureAssembly depId conf = do
   tbRmDep <- Dep.getDeployment depId (Config.rootDir conf) (Config.haldPath conf) (Config.bootPath conf)
+  Fail.installGenericHandler [sigINT, sigTERM] conf (Just tbRmDep)
+
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
   Space.rmDep tbRmDep conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

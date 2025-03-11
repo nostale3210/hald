@@ -29,5 +29,3 @@ RUN chmod 4755 /usr/bin/newgidmap && \
 RUN KVER="$(rpm -q kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
     dracut --no-hostonly --kver "$KVER" --reproducible -v --add "ald" \
     -f "/usr/lib/modules/$KVER/initramfs.img"
-
-RUN touch /files

@@ -5,9 +5,9 @@ import Control.Monad (when)
 import Data.List (nub)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
-import Main.Fail qualified as Fail
 import Main.Util qualified as Util
 import System.Directory
+import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process
 
 createSkeleton :: Int -> Config.Config -> IO ()
@@ -28,13 +28,8 @@ createBootEntry depId conf = do
           )
           ( \e -> do
               let err = show (e :: IOException)
-              deployment <-
-                Dep.getDeployment
-                  depId
-                  (Config.rootDir conf)
-                  (Config.haldPath conf)
-                  (Config.bootPath conf)
-              Fail.failAndCleanup err deployment
+              putStrLn err
+              raiseSignal sigTERM
               return ""
           )
       catch
@@ -44,14 +39,8 @@ createBootEntry depId conf = do
         )
         ( \e -> do
             let err = show (e :: IOException)
-            Util.printInfo "Couldn't create boot entry!" (Config.interactive conf)
-            deployment <-
-              Dep.getDeployment
-                depId
-                (Config.rootDir conf)
-                (Config.haldPath conf)
-                (Config.bootPath conf)
-            Fail.failAndCleanup err deployment
+            Util.printInfo ("Couldn't create boot entry!\n" <> err) (Config.interactive conf)
+            raiseSignal sigTERM
         )
     else
       error
@@ -63,11 +52,11 @@ createBootEntry depId conf = do
 generateBootEntry :: Int -> String -> String
 generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
 
-syncSystemConfig :: Bool -> Int -> Config.Config -> IO ()
-syncSystemConfig dropState depId conf = do
+syncSystemConfig :: Bool -> Config.Config -> IO ()
+syncSystemConfig dropState conf = do
   if dropState
     then syncMinimumState (Config.haldPath conf)
-    else syncState depId conf
+    else syncState conf
   catch
     ( callCommand
         ( "podman cp ald-root:/etc/passwd "
@@ -78,12 +67,8 @@ syncSystemConfig dropState depId conf = do
     )
     ( \e -> do
         let err = show (e :: IOException)
-        Util.printInfo "Couldn't sync system config!" (Config.interactive conf)
-        Fail.failAndCleanup err $
-          Dep.createDeployment
-            [depId]
-            (Config.haldPath conf)
-            (Config.bootPath conf)
+        Util.printInfo ("Couldn't sync system config!\n" <> err) (Config.interactive conf)
+        raiseSignal sigTERM
     )
   mergeFiles "/etc/passwd" (Config.haldPath conf <> "/passwd") (Config.haldPath conf <> "/image/etc/passwd")
   mergeFiles "/etc/shadow" (Config.haldPath conf <> "/shadow") (Config.haldPath conf <> "/image/etc/shadow")
@@ -108,27 +93,27 @@ mergeFiles inputA inputB outputFile = do
     catch
       (readFile inputA)
       ( \e -> do
-          let err = show (e :: IOException)
+          let _ = show (e :: IOException)
           Util.printInfo "Failed to merge files!" False
-          Fail.failAndCleanup err Dep.dummyDeployment
+          raiseSignal sigTERM
           return ""
       )
   contentB <-
     catch
       (readFile inputB)
       ( \e -> do
-          let err = show (e :: IOException)
+          let _ = show (e :: IOException)
           Util.printInfo "Failed to merge files!" False
-          Fail.failAndCleanup err Dep.dummyDeployment
+          raiseSignal sigTERM
           return ""
       )
   let output = unlines . nub . lines $ contentA <> contentB
   catch
     (writeFile outputFile output)
     ( \e -> do
-        let err = show (e :: IOException)
+        let _ = show (e :: IOException)
         Util.printInfo "Failed to merge files!" False
-        Fail.failAndCleanup err Dep.dummyDeployment
+        raiseSignal sigTERM
     )
 
 syncMinimumState :: FilePath -> IO ()
@@ -144,8 +129,8 @@ syncMinimumState hp =
     )
     (hp <> "/image/")
 
-syncState :: Int -> Config.Config -> IO ()
-syncState depId conf = do
+syncState :: Config.Config -> IO ()
+syncState conf = do
   let syncCmd = "cp -rfa --parents \"$@\" " <> Config.haldPath conf <> "/image/"
       statA = "xargs -I{} -P\"$((\"$(nproc --all)\"/2))\" stat --printf \"%Y\\t%n\\0\" {} 2>/dev/null | "
       xBashC = "xargs -0 -I{} -P\"$((\"$(nproc --all)\"/2))\" "
@@ -162,13 +147,8 @@ syncState depId conf = do
     )
     ( \e -> do
         let err = show (e :: IOException)
-        deployment <-
-          Dep.getDeployment
-            depId
-            (Config.rootDir conf)
-            (Config.haldPath conf)
-            (Config.bootPath conf)
-        Fail.failAndCleanup err deployment
+        putStrLn err
+        raiseSignal sigTERM
     )
   syncMinimumState (Config.haldPath conf)
 
@@ -195,11 +175,21 @@ hardlinkDep :: Dep.Deployment -> FilePath -> IO ()
 hardlinkDep deployment hp = do
   catch
     ( callCommand
-        ("podman cp -a ald-root:/files " <> hp <> "/." <> show (Dep.identifier deployment))
+        ( "podman cp -a ald-root:/files "
+            <> hp
+            <> "/."
+            <> show (Dep.identifier deployment)
+            <> " &>/dev/null"
+        )
     )
     ( \e -> do
-        let err = show (e :: IOException)
-        Fail.failAndCleanup err deployment
+        let _ = show (e :: IOException)
+        catch
+          (writeFile (hp <> "/." <> show (Dep.identifier deployment)) "")
+          ( \e2 -> do
+              let _ = show (e2 :: IOException)
+              raiseSignal sigTERM
+          )
     )
   Util.ensureDirExists $ hp <> "/" <> show (Dep.identifier deployment) <> "/usr"
   catch
@@ -214,8 +204,8 @@ hardlinkDep deployment hp = do
         )
     )
     ( \e -> do
-        let err = show (e :: IOException)
-        Fail.failAndCleanup err deployment
+        let _ = show (e :: IOException)
+        raiseSignal sigTERM
     )
   catch
     ( writeFile
@@ -227,8 +217,8 @@ hardlinkDep deployment hp = do
         (show (Dep.identifier deployment))
     )
     ( \e -> do
-        let err = show (e :: IOException)
-        Fail.failAndCleanup err deployment
+        let _ = show (e :: IOException)
+        raiseSignal sigTERM
     )
   catch
     ( callCommand
@@ -241,8 +231,8 @@ hardlinkDep deployment hp = do
         )
     )
     ( \e -> do
-        let err = show (e :: IOException)
-        Fail.failAndCleanup err deployment
+        let _ = show (e :: IOException)
+        raiseSignal sigTERM
     )
 
 placeBootFiles :: Dep.Deployment -> FilePath -> IO ()
@@ -254,7 +244,7 @@ placeBootFiles deployment hp = do
     Just x -> do
       copyFile (head kernel) (x <> "/vmlinuz")
       copyFile (head initrd) (x <> "/initramfs.img")
-    Nothing -> Fail.failAndCleanup "Couldn't place place boot components." deployment
+    Nothing -> raiseSignal sigTERM
   where
     modulePathSearch =
       Util.recursiveFileSearch
