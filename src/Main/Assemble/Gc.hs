@@ -8,9 +8,9 @@ import Main.Space qualified as Space
 import Main.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentGcAssemblyPre :: Config.Config -> IO ()
-deploymentGcAssemblyPre conf = do
-  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf)
+deploymentGcAssemblyPre :: Config.Config -> Bool -> IO ()
+deploymentGcAssemblyPre conf inhibit = do
+  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
   Fail.installGenericHandler [sigINT, sigTERM] conf Nothing
   deploymentGcAssembly conf msgCont
 

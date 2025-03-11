@@ -8,9 +8,9 @@ import Main.Lock qualified as Lock
 import Main.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentActivationAssemblyPre :: Int -> Config.Config -> IO ()
-deploymentActivationAssemblyPre newDepId conf = do
-  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf)
+deploymentActivationAssemblyPre :: Int -> Config.Config -> Bool -> IO ()
+deploymentActivationAssemblyPre newDepId conf inhibit = do
+  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
   Fail.installGenericHandler [sigINT, sigTERM] conf Nothing
   deploymentActivationAssembly newDepId conf msgCont
 

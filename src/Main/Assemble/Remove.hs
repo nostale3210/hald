@@ -8,9 +8,9 @@ import Main.Space qualified as Space
 import Main.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentErasureAssemblyPre :: Int -> Config.Config -> IO ()
-deploymentErasureAssemblyPre depId conf = do
-  _ <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf)
+deploymentErasureAssemblyPre :: Int -> Config.Config -> Bool -> IO ()
+deploymentErasureAssemblyPre depId conf inhibit = do
+  _ <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
   deploymentErasureAssembly depId conf
 
 deploymentErasureAssembly :: Int -> Config.Config -> IO ()

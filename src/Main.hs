@@ -24,13 +24,14 @@ assembleAction parser = do
           else config
   let conf = Config.applyUserConfig config' userConf
   case Cli.optCommand parser of
-    Cli.Dep a b c d e f -> Ascr.deploymentCreationAssemblyPre a b c d e f conf
-    Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf
-    Cli.Gc -> Asgc.deploymentGcAssemblyPre conf
-    Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf
+    Cli.Dep a b c d e f -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit
+    Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf inhibit
+    Cli.Gc -> Asgc.deploymentGcAssemblyPre conf inhibit
+    Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf inhibit
     Cli.Status -> Status.printDepStati conf
     Cli.Diff x y -> Diff.printDiff x y "rpm" conf
   where
+    inhibit = not $ Cli.optSystemd parser
     config =
       if Cli.optRootdir parser == "/"
         then

@@ -13,9 +13,9 @@ import Main.Space qualified as Space
 import Main.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> IO ()
-deploymentCreationAssemblyPre act build keep gc up se conf = do
-  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf)
+deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> IO ()
+deploymentCreationAssemblyPre act build keep gc up se conf inhibit = do
+  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
   deploymentCreationAssembly act build keep gc up se conf msgCont
 
 deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> IO ()

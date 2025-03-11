@@ -4,6 +4,7 @@ import Options.Applicative
 
 data GlobalOpts = GlobalOpts
   { optRootdir :: !String,
+    optSystemd :: !Bool,
     optCommand :: !Command
   }
 
@@ -25,7 +26,7 @@ data Command
 optsParser :: ParserInfo GlobalOpts
 optsParser =
   info
-    (commandOptions <**> helper)
+    (helper <*> commandOptions)
     ( fullDesc
         <> progDesc "Create and manage deployments from containers"
         <> header "hald - somewhat functional atomic deployments"
@@ -41,6 +42,12 @@ commandOptions =
           <> metavar "ROOTDIR"
           <> value "/"
           <> help "Operate on a different root directory"
+      )
+    <*> flag
+      False
+      True
+      ( long "skip-systemd-inhibit"
+          <> help "Don't invoke systemd-inhibit even if available"
       )
     <*> hsubparser (depCommand <> activateCommand <> statusCommand <> diffCommand <> rmCommand <> gcCommand)
 

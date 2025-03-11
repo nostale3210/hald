@@ -6,10 +6,12 @@ import Control.Concurrent.STM qualified as Stm
 import Control.Exception.Base (IOException, catch)
 import Control.Monad (forM, unless, when)
 import Data.ByteString.Char8 qualified as C
+import GHC.IO.Exception (ExitCode (ExitSuccess))
 import System.Directory
+import System.Environment (getArgs, getExecutablePath)
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory)
-import System.Posix (getRealUserID)
+import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT)
 import System.Process (callCommand)
 
 data MessageContainer
@@ -127,10 +129,13 @@ acquireLock fp = do
       _ <- lockFile fp Exclusive
       return True
 
-genericRootfulPreproc :: FilePath -> Bool -> IO MessageContainer
-genericRootfulPreproc lockPath interactive = do
+genericRootfulPreproc :: FilePath -> Bool -> Bool -> IO MessageContainer
+genericRootfulPreproc lockPath interactive inhibit = do
   isRoot <- rootCheck
   unless isRoot $ error "This action needs elevated privileges!"
+
+  systemdAvailable <- checkSystemdInhibit
+  when (systemdAvailable && inhibit) execWithSystemdInhibit
 
   isLocked <- acquireLock lockPath
   unless isLocked $ error "Couldn't acquire lock!"
@@ -152,6 +157,37 @@ checkInteractive =
         let _ = show (e :: IOException)
         return False
     )
+
+checkSystemdInhibit :: IO Bool
+checkSystemdInhibit =
+  catch
+    ( do
+        callCommand "systemd-inhibit --who=\"hald\" --what=\"idle\" sleep 0.01 &>/dev/null"
+        return True
+    )
+    ( \e -> do
+        let _ = show (e :: IOException)
+        return False
+    )
+
+execWithSystemdInhibit :: IO ()
+execWithSystemdInhibit =
+  getArgs >>= \cmdArgs ->
+    getExecutablePath >>= \execPath ->
+      catch
+        ( do
+            callCommand $
+              "systemd-inhibit --what=\"idle:sleep:shutdown\" --who=\"ald-rootful-ops\" "
+                <> "--why=\"Managing deployments\" -- "
+                <> execPath
+                <> " --skip-systemd-inhibit "
+                <> unwords cmdArgs
+            exitImmediately ExitSuccess
+        )
+        ( \e -> do
+            let _ = show (e :: IOException)
+            raiseSignal sigINT
+        )
 
 printProgress :: MessageContainer -> String -> IO ()
 printProgress msgCont status = do
