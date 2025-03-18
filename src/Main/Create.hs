@@ -11,9 +11,9 @@ import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process
 
 createSkeleton :: Int -> Config.Config -> IO ()
-createSkeleton depId conf = do
+createSkeleton depId conf =
   Util.ensureDirExists (Config.haldPath conf <> "/" <> show depId)
-  Util.ensureDirExists (Config.bootPath conf <> "/" <> show depId)
+    >> Util.ensureDirExists (Config.bootPath conf <> "/" <> show depId)
 
 createBootEntry :: Int -> Config.Config -> IO ()
 createBootEntry depId conf = do
@@ -26,21 +26,21 @@ createBootEntry depId conf = do
           ( readFile $
               Config.haldPath conf <> "/boot.conf"
           )
-          ( \e -> do
+          ( \e ->
               let err = show (e :: IOException)
-              putStrLn err
-              raiseSignal sigTERM
-              return ""
+               in putStrLn err
+                    >> raiseSignal sigTERM
+                    >> return ""
           )
       catch
         ( writeFile
             (Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf")
             (generateBootEntry depId templateContent)
         )
-        ( \e -> do
+        ( \e ->
             let err = show (e :: IOException)
-            Util.printInfo ("Couldn't create boot entry!\n" <> err) (Config.interactive conf)
-            raiseSignal sigTERM
+             in Util.printInfo ("Couldn't create boot entry!\n" <> err) (Config.interactive conf)
+                  >> raiseSignal sigTERM
         )
     else
       error
@@ -65,55 +65,55 @@ syncSystemConfig dropState conf = do
             <> Config.haldPath conf
         )
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        Util.printInfo ("Couldn't sync system config!\n" <> err) (Config.interactive conf)
-        raiseSignal sigTERM
+         in Util.printInfo ("Couldn't sync system config!\n" <> err) (Config.interactive conf)
+              >> raiseSignal sigTERM
     )
   mergeFiles "/etc/passwd" (Config.haldPath conf <> "/passwd") (Config.haldPath conf <> "/image/etc/passwd")
+    >> removeTmpFile (Config.haldPath conf <> "/passwd")
   mergeFiles "/etc/shadow" (Config.haldPath conf <> "/shadow") (Config.haldPath conf <> "/image/etc/shadow")
-  removeTmpFile $ Config.haldPath conf <> "/passwd"
-  removeTmpFile $ Config.haldPath conf <> "/shadow"
+    >> removeTmpFile (Config.haldPath conf <> "/shadow")
 
 removeTmpFile :: FilePath -> IO ()
-removeTmpFile file = do
-  fileExists <- Util.pathExists file
-  when fileExists $
-    catch
-      ( removeFile file
-      )
-      ( \e -> do
-          let err = show (e :: IOException)
-          Util.printInfo ("Couldn't remove temporary files; " <> err) False
-      )
+removeTmpFile file =
+  Util.pathExists file >>= \fileExists ->
+    when fileExists $
+      catch
+        ( removeFile file
+        )
+        ( \e ->
+            let err = show (e :: IOException)
+             in Util.printInfo ("Couldn't remove temporary files; " <> err) False
+        )
 
 mergeFiles :: FilePath -> FilePath -> FilePath -> IO ()
 mergeFiles inputA inputB outputFile = do
   contentA <-
     catch
       (readFile inputA)
-      ( \e -> do
+      ( \e ->
           let _ = show (e :: IOException)
-          Util.printInfo "Failed to merge files!" False
-          raiseSignal sigTERM
-          return ""
+           in Util.printInfo "Failed to merge files!" False
+                >> raiseSignal sigTERM
+                >> return ""
       )
   contentB <-
     catch
       (readFile inputB)
-      ( \e -> do
+      ( \e ->
           let _ = show (e :: IOException)
-          Util.printInfo "Failed to merge files!" False
-          raiseSignal sigTERM
-          return ""
+           in Util.printInfo "Failed to merge files!" False
+                >> raiseSignal sigTERM
+                >> return ""
       )
   let output = unlines . nub . lines $ contentA <> contentB
   catch
     (writeFile outputFile output)
-    ( \e -> do
+    ( \e ->
         let _ = show (e :: IOException)
-        Util.printInfo "Failed to merge files!" False
-        raiseSignal sigTERM
+         in Util.printInfo "Failed to merge files!" False
+              >> raiseSignal sigTERM
     )
 
 syncMinimumState :: FilePath -> IO ()
@@ -130,46 +130,49 @@ syncMinimumState hp =
     (hp <> "/image/")
 
 syncState :: Config.Config -> IO ()
-syncState conf = do
+syncState conf =
   let syncCmd = "cp -rfa --parents \"$@\" " <> Config.haldPath conf <> "/image/"
       statA = "xargs -I{} -P\"$((\"$(nproc --all)\"/2))\" stat --printf \"%Y\\t%n\\0\" {} 2>/dev/null | "
       xBashC = "xargs -0 -I{} -P\"$((\"$(nproc --all)\"/2))\" "
       testTsD = "bash -c 'test \"$(echo {} | cut -d\" \" -f1)\" == 0 || echo {}' | cut -d\" \" -f2 | "
       xargsSync = "xargs -n1 bash -c '" <> syncCmd <> "' _"
-  catch
-    ( callCommand
-        ( "find /etc ! -type d | "
-            <> statA
-            <> xBashC
-            <> testTsD
-            <> xargsSync
+   in catch
+        ( callCommand
+            ( "find /etc ! -type d | "
+                <> statA
+                <> xBashC
+                <> testTsD
+                <> xargsSync
+            )
         )
-    )
-    ( \e -> do
-        let err = show (e :: IOException)
-        putStrLn err
-        raiseSignal sigTERM
-    )
-  syncMinimumState (Config.haldPath conf)
+        ( \e ->
+            let err = show (e :: IOException)
+             in putStrLn err
+                  >> raiseSignal sigTERM
+        )
+        >> syncMinimumState (Config.haldPath conf)
 
 syncSingleFile :: [FilePath] -> FilePath -> IO ()
 syncSingleFile files destination =
   case files of
     [] -> return ()
-    x : xs -> do
-      catch
-        ( callCommand
-            ( "cp -rfa --parents "
-                <> x
-                <> " "
-                <> destination
-            )
+    x : _ ->
+      mapM_
+        ( \y ->
+            catch
+              ( callCommand
+                  ( "cp -rfa --parents "
+                      <> y
+                      <> " "
+                      <> destination
+                  )
+              )
+              ( \e ->
+                  let _ = show (e :: IOException)
+                   in Util.printInfo ("File " <> x <> " couldn't be synchronized.") False
+              )
         )
-        ( \e -> do
-            let _ = show (e :: IOException)
-            Util.printInfo ("File " <> x <> " couldn't be synchronized.") False
-        )
-      syncSingleFile xs destination
+        files
 
 hardlinkDep :: Dep.Deployment -> FilePath -> IO ()
 hardlinkDep deployment hp = do
@@ -182,14 +185,11 @@ hardlinkDep deployment hp = do
             <> " &>/dev/null"
         )
     )
-    ( \e -> do
+    ( \e ->
         let _ = show (e :: IOException)
-        catch
-          (writeFile (hp <> "/." <> show (Dep.identifier deployment)) "")
-          ( \e2 -> do
-              let _ = show (e2 :: IOException)
-              raiseSignal sigTERM
-          )
+         in catch
+              (writeFile (hp <> "/." <> show (Dep.identifier deployment)) "")
+              (\e2 -> let _ = show (e2 :: IOException) in raiseSignal sigTERM)
     )
   Util.ensureDirExists $ hp <> "/" <> show (Dep.identifier deployment) <> "/usr"
   catch
@@ -203,10 +203,7 @@ hardlinkDep deployment hp = do
             <> "/usr/"
         )
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        raiseSignal sigTERM
-    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
   catch
     ( writeFile
         ( hp
@@ -216,10 +213,7 @@ hardlinkDep deployment hp = do
         )
         (show (Dep.identifier deployment))
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        raiseSignal sigTERM
-    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
   catch
     ( callCommand
         ( "rsync -aHlx "
@@ -230,10 +224,7 @@ hardlinkDep deployment hp = do
             <> show (Dep.identifier deployment)
         )
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        raiseSignal sigTERM
-    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
 
 placeBootFiles :: Dep.Deployment -> FilePath -> IO ()
 placeBootFiles deployment hp = do

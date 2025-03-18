@@ -37,9 +37,9 @@ setIPath mode fp =
             <> fp
         )
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        putStrLn $ "Couldn't unlock /; " <> err
+         in putStrLn $ "Couldn't unlock /; " <> err
     )
 
 roBindMountDirToSelf :: ReadMode -> FilePath -> IO ()
@@ -56,9 +56,9 @@ roBindMountDirToSelf readMode dirPath =
             <> dirPath
         )
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        putStrLn $ "Failed to bind mount " <> dirPath <> "; " <> err
+         in putStrLn $ "Failed to bind mount " <> dirPath <> "; " <> err
     )
 
 umountDirForcibly :: RecursiveUmount -> FilePath -> IO ()
@@ -73,9 +73,9 @@ umountDirForcibly opts dirPath =
             <> dirPath
         )
     )
-    ( \e -> do
+    ( \e ->
         let _ = show (e :: IOException)
-        return ()
+         in return ()
     )
 
 unlockRoot :: FilePath -> IO ()

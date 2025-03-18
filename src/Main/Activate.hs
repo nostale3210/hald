@@ -11,9 +11,7 @@ import System.Process (callCommand)
 getNewRoot :: Dep.Deployment -> IO FilePath
 getNewRoot nextDep =
   case Dep.rootDir nextDep of
-    Nothing -> do
-      raiseSignal sigTERM
-      return "Defective"
+    Nothing -> raiseSignal sigTERM >> return "Defective"
     Just x -> return x
 
 exchPaths :: FilePath -> FilePath -> IO ()
@@ -26,20 +24,20 @@ exchPaths oldPath newPath =
             <> newPath
         )
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        putStrLn err
-        raiseSignal sigTERM
+         in putStrLn err
+              >> raiseSignal sigTERM
     )
 
 movePath :: FilePath -> FilePath -> IO ()
 movePath oldPath newPath =
   catch
     (renameDirectory oldPath newPath)
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        putStrLn err
-        raiseSignal sigTERM
+         in putStrLn err
+              >> raiseSignal sigTERM
     )
 
 activateNewRoot :: FilePath -> Dep.Deployment -> FilePath -> IO ()
@@ -47,10 +45,10 @@ activateNewRoot root newDep hp = do
   idFileContent <-
     catch
       (readFile (root <> "/usr/.ald_dep"))
-      ( \e -> do
+      ( \e ->
           let err = show (e :: IOException)
-          Util.printInfo ("Couldn't read deployment ID; " <> err) False
-          return "0"
+           in Util.printInfo ("Couldn't read deployment ID; " <> err) False
+                >> return "0"
       )
   let oldId = read (head $ words idFileContent) :: Int
       newId = Dep.identifier newDep

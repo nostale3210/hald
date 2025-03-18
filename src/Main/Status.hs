@@ -30,9 +30,9 @@ getDepStatus conf dep = do
       then
         catch
           (readFile osReleasePath)
-          ( \e -> do
+          ( \e ->
               let err = show (e :: IOException)
-              return $ "Couldn't read os-release; " <> err
+               in return $ "Couldn't read os-release; " <> err
           )
       else return "No os-release file found."
   let osReleaseLines = lines osReleaseContent
@@ -55,9 +55,9 @@ returnOsField field content =
         else returnOsField field xs
 
 returnKernelVersion :: FilePath -> IO String
-returnKernelVersion fp = do
-  modulesContent <- globDir1 (compile "*") (takeDirectory fp <> "/modules")
-  return . takeBaseName $ unwords modulesContent
+returnKernelVersion fp =
+  globDir1 (compile "*") (takeDirectory fp <> "/modules") >>= \modulesContent ->
+    return . takeBaseName $ unwords modulesContent
 
 printDepStati :: Config.Config -> IO ()
 printDepStati conf = do
@@ -65,16 +65,16 @@ printDepStati conf = do
   let sortedDeps = sort allDeps
   depList <-
     mapM
-      ( \dep -> do
-          fullDep <-
-            Dep.getDeployment
-              dep
-              (Config.rootDir conf)
-              (Config.haldPath conf)
-              (Config.bootPath conf)
-          getDepStatus
-            conf
-            fullDep
+      ( \dep ->
+          Dep.getDeployment
+            dep
+            (Config.rootDir conf)
+            (Config.haldPath conf)
+            (Config.bootPath conf)
+            >>= \fullDep ->
+              getDepStatus
+                conf
+                fullDep
       )
       sortedDeps
   putStrLn "Currently retained deployments:"

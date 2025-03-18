@@ -45,21 +45,18 @@ pathExists :: FilePath -> IO Bool
 pathExists path =
   catch
     (doesPathExist path)
-    ( \e -> do
-        let _ = show (e :: IOException)
-        return False
-    )
+    (\e -> let _ = show (e :: IOException) in return False)
 
 ensureDirExists :: FilePath -> IO ()
 ensureDirExists dir = do
-  dirExistence <- doesDirectoryExist dir
-  unless dirExistence $
-    catch
-      (createDirectoryIfMissing True dir)
-      ( \e -> do
-          let err = show (e :: IOException)
-          printInfo ("Couldn't create missing directory " <> dir <> "; " <> err) False
-      )
+  doesDirectoryExist dir >>= \dirExistence ->
+    unless dirExistence $
+      catch
+        (createDirectoryIfMissing True dir)
+        ( \e ->
+            let err = show (e :: IOException)
+             in printInfo ("Couldn't create missing directory " <> dir <> "; " <> err) False
+        )
 
 recursiveFileSearch :: FilePath -> FilePath -> IO [FilePath]
 recursiveFileSearch rootDir fileName = do
@@ -86,10 +83,10 @@ relabelSeLinuxPath rootPath contexts relabelDir bp = do
             <> bp
         )
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        printInfo "Relabeling boot directory failed." False
-        error err
+         in printInfo "Relabeling boot directory failed." False
+              >> error err
     )
   catch
     ( callCommand
@@ -102,21 +99,21 @@ relabelSeLinuxPath rootPath contexts relabelDir bp = do
             <> " 2>/dev/null"
         )
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        printInfo "Relabeling root directory failed." False
-        error err
+         in printInfo "Relabeling root directory failed." False
+              >> error err
     )
 
 getUserId :: IO Int
-getUserId = do
-  uid <- getRealUserID
-  return (read (show uid) :: Int)
+getUserId =
+  getRealUserID >>= \uid ->
+    return (read (show uid) :: Int)
 
 rootCheck :: IO Bool
-rootCheck = do
-  uid <- getUserId
-  return $ uid == 0
+rootCheck =
+  getUserId >>= \uid ->
+    return $ uid == 0
 
 acquireLock :: FilePath -> IO Bool
 acquireLock fp = do
@@ -148,26 +145,24 @@ genericRootfulPreproc lockPath interactive inhibit = do
 checkInteractive :: IO Bool
 checkInteractive =
   catch
-    ( do
-        callCommand
-          "{ infocmp 2>/dev/null | grep -q smcup ; } && { infocmp 2>/dev/null | grep -q rmcup ; }"
-        return True
+    ( callCommand
+        "{ infocmp 2>/dev/null | grep -q smcup ; } && { infocmp 2>/dev/null | grep -q rmcup ; }"
+        >> return True
     )
-    ( \e -> do
+    ( \e ->
         let _ = show (e :: IOException)
-        return False
+         in return False
     )
 
 checkSystemdInhibit :: IO Bool
 checkSystemdInhibit =
   catch
-    ( do
-        callCommand "systemd-inhibit --who=\"hald\" --what=\"idle\" sleep 0.01 &>/dev/null"
-        return True
+    ( callCommand "systemd-inhibit --who=\"hald\" --what=\"idle\" sleep 0.01 &>/dev/null"
+        >> return True
     )
-    ( \e -> do
+    ( \e ->
         let _ = show (e :: IOException)
-        return False
+         in return False
     )
 
 execWithSystemdInhibit :: IO ()
@@ -175,22 +170,22 @@ execWithSystemdInhibit =
   getArgs >>= \cmdArgs ->
     getExecutablePath >>= \execPath ->
       catch
-        ( do
-            callCommand $
-              "systemd-inhibit --what=\"idle:sleep:shutdown\" --who=\"ald-rootful-ops\" "
+        ( callCommand
+            ( "systemd-inhibit --what=\"idle:sleep:shutdown\" --who=\"ald-rootful-ops\" "
                 <> "--why=\"Managing deployments\" -- "
                 <> execPath
                 <> " --skip-systemd-inhibit "
                 <> unwords cmdArgs
-            exitImmediately ExitSuccess
+            )
+            >> exitImmediately ExitSuccess
         )
-        ( \e -> do
+        ( \e ->
             let _ = show (e :: IOException)
-            raiseSignal sigINT
+             in raiseSignal sigINT
         )
 
 printProgress :: MessageContainer -> String -> IO ()
-printProgress msgCont status = do
+printProgress msgCont status =
   if interactive msgCont
     then Stm.atomically $ Stm.writeTChan (channel msgCont) status
     else putStrLn $ "[Progress] " <> status

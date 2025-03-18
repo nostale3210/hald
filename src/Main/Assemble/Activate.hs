@@ -25,7 +25,6 @@ deploymentActivationAssembly newDepId conf msgCont = do
       (Config.rootDir conf)
       (Config.haldPath conf)
       (Config.bootPath conf)
-  let root = Config.rootDir conf <> "/"
   Lock.unlockRoot root
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
   Lock.umountDirForcibly Lock.Rfl $ root <> "usr"
@@ -37,3 +36,5 @@ deploymentActivationAssembly newDepId conf msgCont = do
   Lock.roBindMountDirToSelf Lock.Rw $ root <> "usr/local"
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
   Lock.lockRoot root
+  where
+    root = Config.rootDir conf <> "/"

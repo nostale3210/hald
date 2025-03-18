@@ -52,18 +52,18 @@ printDiff from to cmd conf = do
     _ -> return ()
 
 getRpmStatus :: Int -> Config.Config -> IO String
-getRpmStatus dep conf = do
-  fullDep <-
-    Dep.getDeployment
-      dep
-      (Config.rootDir conf)
-      (Config.haldPath conf)
-      (Config.bootPath conf)
-  let root =
-        if Dep.rootDir fullDep == Just "/usr"
-          then "/"
-          else Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
-  return $ "rpm -qa --root=" <> root
+getRpmStatus dep conf =
+  Dep.getDeployment
+    dep
+    (Config.rootDir conf)
+    (Config.haldPath conf)
+    (Config.bootPath conf)
+    >>= \fullDep ->
+      let root =
+            if Dep.rootDir fullDep == Just "/usr"
+              then "/"
+              else Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
+       in (return $ "rpm -qa --root=" <> root)
 
 diffStati :: String -> String -> IO ()
 diffStati from to =
@@ -76,7 +76,4 @@ diffStati from to =
             <> " | sort) | grep \"|\\|>\\|<\""
         )
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        putStrLn "No difference found."
-    )
+    (\e -> let _ = show (e :: IOException) in putStrLn "No difference found.")

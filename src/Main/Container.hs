@@ -6,21 +6,14 @@ import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process
 
 mountContainer :: String -> String -> IO FilePath
-mountContainer podName podUri = do
+mountContainer podName podUri =
   catch
     (callCommand ("podman create --replace --name " <> podName <> " " <> podUri <> " &>/dev/null"))
-    ( \e -> do
-        let err = show (e :: IOException)
-        error err
-    )
-  podMount <-
-    catch
+    (\e -> let err = show (e :: IOException) in error err)
+    >> catch
       (readProcess "podman" ["mount", "ald-root"] [])
-      ( \e -> do
-          let err = show (e :: IOException)
-          error err
-      )
-  return $ Util.removeString "\n" podMount
+      (\e -> let err = show (e :: IOException) in error err)
+    >>= \podMount -> return $ Util.removeString "\n" podMount
 
 umountContainer :: String -> IO ()
 umountContainer podName =
@@ -28,9 +21,9 @@ umountContainer podName =
     ( callCommand
         ("podman unmount " <> podName <> " &>/dev/null")
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        Util.printInfo ("Unmounting container " <> podName <> " unsuccessful\n" <> err) False
+         in Util.printInfo ("Unmounting container " <> podName <> " unsuccessful\n" <> err) False
     )
 
 rmContainer :: String -> IO ()
@@ -39,9 +32,9 @@ rmContainer podName =
     ( callCommand
         ("podman rm -f " <> podName <> " &>/dev/null")
     )
-    ( \e -> do
+    ( \e ->
         let err = show (e :: IOException)
-        Util.printInfo ("Removing container " <> podName <> " unsuccessful\n" <> err) False
+         in Util.printInfo ("Removing container " <> podName <> " unsuccessful\n" <> err) False
     )
 
 buildImage :: String -> String -> FilePath -> IO ()
@@ -50,44 +43,32 @@ buildImage podUri locTag confPath =
     ( callCommand
         ("podman build --build-arg=SOURCE_IMAGE=" <> podUri <> " -t " <> locTag <> " " <> confPath)
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        raiseSignal sigTERM
-    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
 
 pullImage :: String -> IO Bool
 pullImage podUri = do
   curDigest <-
     catch
       (readProcess "podman" ["inspect", "--format", "'{{.Digest}}'", podUri] [])
-      ( \e -> do
-          let err = show (e :: IOException)
-          error err
-      )
+      (\e -> let err = show (e :: IOException) in error err)
   upstrDigest <-
     catch
       (readProcess "skopeo" ["inspect", "--format", "'{{.Digest}}'", "docker://" <> podUri] [])
-      ( \e -> do
-          let _ = show (e :: IOException)
-          return ""
-      )
+      (\e -> let _ = show (e :: IOException) in return "")
   if curDigest == upstrDigest
-    then return False
+    then Util.printInfo "Latest image already pulled" False >> return False
     else do
       catch
         (callCommand ("podman pull " <> podUri))
-        ( \e -> do
-            let _ = show (e :: IOException)
-            raiseSignal sigTERM
-        )
+        (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
       return True
 
 syncImage :: FilePath -> FilePath -> IO ()
-syncImage fp hp = do
-  Util.ensureDirExists $ hp <> "/image"
-  syncImageStructure fp hp
-  syncImageBatched fp hp
-  trimImageLeftovers fp hp
+syncImage fp hp =
+  Util.ensureDirExists (hp <> "/image")
+    >> syncImageStructure fp hp
+    >> syncImageBatched fp hp
+    >> trimImageLeftovers fp hp
 
 syncImageStructure :: FilePath -> FilePath -> IO ()
 syncImageStructure fp hp =
@@ -100,13 +81,10 @@ syncImageStructure fp hp =
             <> "/image/ &>/dev/null"
         )
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        raiseSignal sigTERM
-    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
 
 syncImageBatched :: FilePath -> FilePath -> IO ()
-syncImageBatched fp hp = do
+syncImageBatched fp hp =
   catch
     ( callCommand
         ( "find "
@@ -120,10 +98,7 @@ syncImageBatched fp hp = do
             <> "/image/ &>/dev/null' _ &>/dev/null"
         )
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        raiseSignal sigTERM
-    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
 
 trimImageLeftovers :: FilePath -> FilePath -> IO ()
 trimImageLeftovers fp hp =
@@ -144,7 +119,4 @@ trimImageLeftovers fp hp =
             <> "/image|g\" | xargs -0 rm -rf &>/dev/null"
         )
     )
-    ( \e -> do
-        let _ = show (e :: IOException)
-        raiseSignal sigTERM
-    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)

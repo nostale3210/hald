@@ -39,10 +39,10 @@ getUserConfig conf = do
     then
       catch
         (readFile (configPath conf <> "/hald.conf"))
-        ( \e -> do
+        ( \e ->
             let err = show (e :: IOException)
-            putStrLn $ "Couldn't read config file; " <> err
-            return ""
+             in putStrLn ("Couldn't read config file; " <> err)
+                  >> return ""
         )
     else return ""
 

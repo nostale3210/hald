@@ -10,17 +10,7 @@ import System.Directory
 
 rmDep :: Dep.Deployment -> Config.Config -> IO ()
 rmDep deployment conf = do
-  Util.printInfo
-    ("Removing deployment " <> show (Dep.identifier deployment) <> "...")
-    (Config.interactive conf)
-
-  let depId = Dep.identifier deployment
-  tbRmDep <-
-    Dep.getDeployment
-      depId
-      (Config.rootDir conf)
-      (Config.haldPath conf)
-      (Config.bootPath conf)
+  tbRmDep <- tbRmDep'
   let bootComponents = Dep.bootComponents tbRmDep
   bootPathNoComps <- Util.pathExists (Config.bootPath conf <> "/" <> show depId)
   let tbRmBootComponents =
@@ -32,10 +22,21 @@ rmDep deployment conf = do
               }
           else
             bootComponents
-  rmComponent depId "root dir" (Dep.rootDir tbRmDep)
-  rmComponent depId "boot dir" (Dep.bootDir tbRmBootComponents)
-  rmComponent depId "boot entry" (Dep.bootEntry tbRmBootComponents)
-  rmComponent depId "lockfile" (Dep.lockfile tbRmDep)
+  mapM_
+    (uncurry (rmComponent depId))
+    [ ("root dir", Dep.rootDir tbRmDep),
+      ("boot dir", Dep.bootDir tbRmBootComponents),
+      ("boot entry", Dep.bootEntry tbRmBootComponents),
+      ("lockfile", Dep.lockfile tbRmDep)
+    ]
+  where
+    depId = Dep.identifier deployment
+    tbRmDep' =
+      Dep.getDeployment
+        depId
+        (Config.rootDir conf)
+        (Config.haldPath conf)
+        (Config.bootPath conf)
 
 rmComponent :: Int -> String -> Maybe FilePath -> IO ()
 rmComponent ident component path =
@@ -43,9 +44,9 @@ rmComponent ident component path =
     Just p ->
       catch
         (removePathForcibly p)
-        ( \e -> do
+        ( \e ->
             let err = show (e :: IOException)
-            Util.printInfo ("Couldn't remove " <> show ident <> " " <> component <> "; " <> err) False
+             in Util.printInfo ("Couldn't remove " <> show ident <> " " <> component <> "; " <> err) False
         )
     Nothing ->
       Util.printInfo
@@ -69,7 +70,7 @@ rmDeps keepDeps deployments conf
   | otherwise = return ()
 
 gcBroken :: [Int] -> Config.Config -> IO ()
-gcBroken depIds conf = do
+gcBroken depIds conf =
   case depIds of
     [] -> return ()
     x : xs -> do
@@ -100,20 +101,20 @@ checkDep depId conf = do
               (Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep")
               (show depId)
           )
-          ( \e -> do
+          ( \e ->
               let err = show (e :: IOException)
-              Util.printInfo
-                ("Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err)
-                (Config.interactive conf)
+               in Util.printInfo
+                    ("Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err)
+                    (Config.interactive conf)
           )
     else
       if Dep.rootDir dep == Just "/usr"
         then return ()
-        else do
+        else
           Util.printInfo
             ("Collecting broken deployment " <> show depId <> "...")
             (Config.interactive conf)
-          rmDep dep conf
+            >> rmDep dep conf
 
 componentPresent :: Maybe FilePath -> IO Bool
 componentPresent compPath =

@@ -22,7 +22,7 @@ assembleAction parser = do
         if interactive
           then Config.applyConfigKey config ["interactive", show interactive]
           else config
-  let conf = Config.applyUserConfig config' userConf
+      conf = Config.applyUserConfig config' userConf
   case Cli.optCommand parser of
     Cli.Dep a b c d e f -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit
     Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf inhibit

@@ -9,15 +9,23 @@ import Main.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
 deploymentErasureAssemblyPre :: Int -> Config.Config -> Bool -> IO ()
-deploymentErasureAssemblyPre depId conf inhibit = do
-  _ <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
-  deploymentErasureAssembly depId conf
+deploymentErasureAssemblyPre depId conf inhibit =
+  Util.genericRootfulPreproc
+    (Config.configPath conf <> "/.hald.lock")
+    (Config.interactive conf)
+    inhibit
+    >>= \msgContent ->
+      deploymentErasureAssembly depId conf msgContent
 
-deploymentErasureAssembly :: Int -> Config.Config -> IO ()
-deploymentErasureAssembly depId conf = do
+deploymentErasureAssembly :: Int -> Config.Config -> Util.MessageContainer -> IO ()
+deploymentErasureAssembly depId conf msgCont = do
   tbRmDep <- Dep.getDeployment depId (Config.rootDir conf) (Config.haldPath conf) (Config.bootPath conf)
   Fail.installGenericHandler [sigINT, sigTERM] conf (Just tbRmDep)
 
+  Util.printInfo
+    ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
+    (Config.interactive conf)
+  Util.printProgress msgCont ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
   Space.rmDep tbRmDep conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

@@ -119,24 +119,24 @@ getDeployments hp bp = do
   return $ Set.toList $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
 
 getDeploymentsInt :: FilePath -> FilePath -> IO [Int]
-getDeploymentsInt hp bp = do
-  deployments <- getDeployments hp bp
-  let intdeps = map (\d -> read d :: Int) deployments
-  return intdeps
+getDeploymentsInt hp bp =
+  getDeployments hp bp >>= \deployments ->
+    let intdeps = map (\d -> read d :: Int) deployments
+     in return intdeps
 
 getCurrentDeploymentId :: FilePath -> IO Int
-getCurrentDeploymentId root = do
-  content <-
-    catch
-      (readFile (root <> "/usr/.ald_dep"))
-      ( \e -> do
-          let err = show (e :: IOException)
-          Util.printInfo ("Couldn't read deployment ID; " <> err) False
-          return "0"
-      )
-  return (read (head $ lines content) :: Int)
+getCurrentDeploymentId root =
+  catch
+    (readFile (root <> "/usr/.ald_dep"))
+    ( \e ->
+        let err = show (e :: IOException)
+         in Util.printInfo ("Couldn't read deployment ID; " <> err) False
+              >> return "0"
+    )
+    >>= \content ->
+      return (read (head $ lines content) :: Int)
 
 getDeploymentId :: Int -> FilePath -> IO Int
-getDeploymentId depId hp = do
-  content <- readFile (hp <> "/" <> show depId <> "/usr/.ald_dep")
-  return (read (head $ lines content) :: Int)
+getDeploymentId depId hp =
+  readFile (hp <> "/" <> show depId <> "/usr/.ald_dep") >>= \content ->
+    return (read (head $ lines content) :: Int)
