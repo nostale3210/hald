@@ -26,6 +26,6 @@ RUN sed -i "s/tsd upgrade/hald dep -uzag/g" /usr/libexec/sys-up && \
 RUN chmod 4755 /usr/bin/newgidmap && \
     chmod 4755 /usr/bin/newuidmap
 
-RUN KVER="$(rpm -q kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
+RUN KVER="$(rpm -q kernel-core --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
     dracut --no-hostonly --kver "$KVER" --reproducible -v --add "ald" \
     -f "/usr/lib/modules/$KVER/initramfs.img"
