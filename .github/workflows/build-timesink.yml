@@ -29,6 +29,9 @@ jobs:
           - timesinkc-main-hald
           - timesinkc-cosmic-nvidia-hald
           - timesinkc-void-hald
+        tag:
+          - latest
+          - 42
 
     steps: 
       - name: Checkout repo
@@ -48,10 +51,10 @@ jobs:
         run: |
           echo "IMAGE_NAME=${{ matrix.image }}" >> $GITHUB_ENV
           if [[ "${{ matrix.image }}" == "timesinkc-main-hald" ]]; then
-            echo "UPSTREAM=ghcr.io/nostale3210/timesinkc-main-standalone:latest" >> $GITHUB_ENV
+            echo "UPSTREAM=ghcr.io/nostale3210/timesinkc-main-standalone:${{ matrix.tag }}" >> $GITHUB_ENV
             echo "CONTAINERFILE=Containerfile.timesink" >> $GITHUB_ENV
           elif [[ "${{ matrix.image }}" == "timesinkc-cosmic-nvidia-hald" ]]; then
-            echo "UPSTREAM=ghcr.io/nostale3210/timesinkc-cosmic-nvidia-standalone:latest" >> $GITHUB_ENV
+            echo "UPSTREAM=ghcr.io/nostale3210/timesinkc-cosmic-nvidia-standalone:${{ matrix.tag }}" >> $GITHUB_ENV
             echo "CONTAINERFILE=Containerfile.timesink" >> $GITHUB_ENV
           elif [[ "${{ matrix.image }}" == "timesinkc-void-hald" ]]; then
             echo "UPSTREAM=ghcr.io/void-linux/void-glibc-full:latest" >> $GITHUB_ENV
@@ -67,7 +70,7 @@ jobs:
             echo "PR_TAG=${SRC}:pr-${{ github.event.number }}" >> $GITHUB_ENV
           else
             echo "DATE_TAG=${SRC}:$(date +%Y%m%d)" >> $GITHUB_ENV
-            echo "LATEST_TAG=${SRC}:latest" >> $GITHUB_ENV
+            echo "LATEST_TAG=${SRC}:${{ matrix.tag }}" >> $GITHUB_ENV
           fi
 
       - name: Retrieve keys
@@ -94,7 +97,7 @@ jobs:
 
           push_pr() {
             FAILED=()
-            podman push "localhost/timesink" "${{ env.PR_TAG }}" \
+            podman push "localhost/timesink" "${{ env.PR_TAG }}" --force-compression \
               --compression-format="$COMPRESSION_FORMAT" --tls-verify=true || FAILED+=("PR")
             if [[ "${{ github.event_name }}" == "pull_request" && "${FAILED[*]}" == *"PR"* ]]; then
               echo "PR failed!" && return 1
@@ -105,7 +108,7 @@ jobs:
             TAG="$1"
             FAILED=()
             podman push "localhost/timesink" "${TAGS[$TAG]}" \
-              --compression-format="$COMPRESSION_FORMAT" --tls-verify=true \
+              --compression-format="$COMPRESSION_FORMAT" --tls-verify=true --force-compression \
               --sign-by-sigstore-private-key=/tmp/certs/SIGNING_SECRET.key || FAILED+=("$TAG")
             if [[ "${FAILED[*]}" == *"DATE"* && "${{ github.event_name }}" != "pull_request" ]]; then
               echo "Pushing "${TAGS[$TAG]}" failed!" && return 1
