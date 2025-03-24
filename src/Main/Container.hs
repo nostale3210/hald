@@ -50,7 +50,7 @@ pullImage podUri = do
   curDigest <-
     catch
       (readProcess "podman" ["inspect", "--format", "'{{.Digest}}'", podUri] [])
-      (\e -> let err = show (e :: IOException) in error err)
+      (\e -> let _ = show (e :: IOException) in return "")
   upstrDigest <-
     catch
       (readProcess "skopeo" ["inspect", "--format", "'{{.Digest}}'", "docker://" <> podUri] [])
