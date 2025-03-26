@@ -22,4 +22,6 @@ RUN cd /hald-build && \
 
 FROM alpine:latest AS target
 
-COPY --from=build /hald /hald
+COPY --from=build /hald /app/hald
+COPY utils/boot /app/boot
+COPY utils/tools /app/tools
