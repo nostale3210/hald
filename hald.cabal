@@ -39,7 +39,7 @@ executable hald
     -- other-extensions:
     build-depends:
         Glob,
-        base ^>=4.17.2.1,
+        base,
         bytestring,
         containers,
         directory,
