@@ -1,6 +1,6 @@
 module Main.Assemble.Create where
 
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Main.Assemble.Activate qualified as Asac
 import Main.Assemble.Gc qualified as Asgc
 import Main.Config qualified as Config
@@ -13,13 +13,13 @@ import Main.Space qualified as Space
 import Main.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> IO ()
-deploymentCreationAssemblyPre act build keep gc up se conf inhibit = do
+deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> IO ()
+deploymentCreationAssemblyPre act build keep gc up se conf inhibit sb = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
-  deploymentCreationAssembly act build keep gc up se conf msgCont
+  deploymentCreationAssembly act build keep gc up se conf msgCont sb
 
-deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> IO ()
-deploymentCreationAssembly act build keep gc up se conf msgCont = do
+deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> Bool -> IO ()
+deploymentCreationAssembly act build keep gc up se conf msgCont sb = do
   updated <-
     if up
       then do
@@ -77,6 +77,11 @@ deploymentCreationAssembly act build keep gc up se conf msgCont = do
         )
         (Config.haldPath pbConf <> "/" <> show (Dep.identifier newDep))
         (Config.bootPath pbConf)
+
+    when sb $ do
+      Util.printProgress msgCont ("Signing deployment " <> show (Dep.identifier newDep) <> " kernel...")
+      Util.signKernel (Config.bootPath pbConf) (Dep.identifier newDep) >>= \signingSuccess ->
+        unless signingSuccess (Util.printInfo "Signing kernel failed!" (Config.interactive pbConf))
 
     when act $ Asac.deploymentActivationAssembly (Dep.identifier newDep) pbConf msgCont
 

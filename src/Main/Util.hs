@@ -126,6 +126,24 @@ acquireLock fp = do
       _ <- lockFile fp Exclusive
       return True
 
+signKernel :: FilePath -> Int -> IO Bool
+signKernel bp dep =
+  let kernelPath = bp <> "/" <> show dep <> "/vmlinuz"
+   in pathExists kernelPath >>= \kernelExists ->
+        ( if kernelExists
+            then
+              catch
+                ( callCommand
+                    ("sbctl sign " <> kernelPath <> " &>/dev/null")
+                    >> return True
+                )
+                ( \e ->
+                    let _ = show (e :: IOException)
+                     in return False
+                )
+            else error $ "Kernel for deployment " <> show dep <> " doesn't seem to exist."
+        )
+
 genericRootfulPreproc :: FilePath -> Bool -> Bool -> IO MessageContainer
 genericRootfulPreproc lockPath interactive inhibit = do
   isRoot <- rootCheck

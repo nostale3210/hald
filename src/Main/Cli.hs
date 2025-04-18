@@ -15,7 +15,8 @@ data Command
         seFlag :: Bool,
         activateFlag :: Bool,
         gcFlag :: Bool,
-        stateFlag :: Bool
+        stateFlag :: Bool,
+        secureBoot :: Bool
       }
   | Activate Int
   | Status
@@ -99,6 +100,13 @@ depOptions =
       ( long "relabel"
           <> short 'z'
           <> help "Relabel new deployment according to selinux contexts"
+      )
+    <*> flag
+      False
+      True
+      ( long "sb"
+        <> short 's'
+        <> help "Sign the deployment's kernel with sbctl"
       )
 
 rmCommand :: Mod CommandFields Command

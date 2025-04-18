@@ -24,7 +24,7 @@ assembleAction parser = do
           else config
       conf = Config.applyUserConfig config' userConf
   case Cli.optCommand parser of
-    Cli.Dep a b c d e f -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit
+    Cli.Dep a b c d e f g -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit g
     Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf inhibit
     Cli.Gc -> Asgc.deploymentGcAssemblyPre conf inhibit
     Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf inhibit
