@@ -1,4 +1,4 @@
 #!/bin/sh
 
-cabal install --installdir=`pwd` --install-method=copy --overwrite-policy=always
+cabal install --installdir=`pwd` --install-method=copy --overwrite-policy=always -O2
 strip hald
