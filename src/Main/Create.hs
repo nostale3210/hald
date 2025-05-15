@@ -153,10 +153,9 @@ syncState conf =
         >> syncMinimumState (Config.haldPath conf)
 
 syncSingleFile :: [FilePath] -> FilePath -> IO ()
-syncSingleFile files destination =
-  case files of
-    [] -> return ()
-    x : _ ->
+syncSingleFile files destination
+  | null files = return ()
+  | otherwise =
       mapM_
         ( \y ->
             catch
@@ -169,7 +168,11 @@ syncSingleFile files destination =
               )
               ( \e ->
                   let _ = show (e :: IOException)
-                   in Util.printInfo ("File " <> x <> " couldn't be synchronized.") False
+                   in Util.printInfo
+                        ( "Some required files couldn't be synchronized.\n"
+                            <> "Manual intervention might be necessary"
+                        )
+                        False
               )
         )
         files
