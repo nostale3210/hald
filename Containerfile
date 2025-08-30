@@ -1,7 +1,7 @@
 FROM alpine:latest AS build
 
 RUN apk add --no-cache git curl gcc g++ gmp-dev ncurses-dev libffi-dev make xz tar perl \
-        zlib zlib-dev zlib-static ncurses-static
+        zlib zlib-dev zlib-static ncurses-static gmp-static
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | \
         BOOTSTRAP_HASKELL_NONINTERACTIVE=1 BOOTSTRAP_HASKELL_MINIMAL=1 sh && \
