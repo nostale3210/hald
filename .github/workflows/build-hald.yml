@@ -21,14 +21,14 @@ jobs:
   build-and-push:
     name: Build and push image
     runs-on: ubuntu-latest
-    permissions: 
+    permissions:
       contents: read
       packages: write
       id-token: write
     strategy:
       fail-fast: false
 
-    steps: 
+    steps:
       - name: Checkout repo
         uses: actions/checkout@v5
 
@@ -71,6 +71,7 @@ jobs:
             --label=org.opencontainers.image.version=main \
             --pull=newer --tag="localhost/hald-utils" \
             --target=target \
+            --annotation=io.github.containers.compression.zstd=true \
             -f ./Containerfile
 
       - name: Push image
@@ -81,7 +82,7 @@ jobs:
           push_pr() {
             FAILED=()
             podman push "localhost/hald-utils" "${{ env.PR_TAG }}" \
-              --compression-format=zstd --tls-verify=true || FAILED+=("PR")
+              --compression-format="zstd:chunked" --tls-verify=true || FAILED+=("PR")
             if [[ "${{ github.event_name }}" == "pull_request" && "${FAILED[*]}" == *"PR"* ]]; then
               echo "PR failed!" && return 1
             else return 0; fi
@@ -91,7 +92,7 @@ jobs:
             TAG="$1"
             FAILED=()
             podman push "localhost/hald-utils" "${TAGS[$TAG]}" \
-              --compression-format=zstd --tls-verify=true \
+              --compression-format="zstd:chunked" --tls-verify=true \
               --sign-by-sigstore-private-key=/tmp/certs/SIGNING_SECRET.key || FAILED+=("$TAG")
             if [[ "${FAILED[*]}" == *"DATE"* && "${{ github.event_name }}" != "pull_request" ]]; then
               echo "Pushing "${TAGS[$TAG]}" failed!" && return 1
