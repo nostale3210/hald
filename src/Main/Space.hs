@@ -22,13 +22,17 @@ rmDep deployment conf = do
               }
           else
             bootComponents
-  mapM_
-    (uncurry (rmComponent depId))
-    [ ("root dir", Dep.rootDir tbRmDep),
-      ("boot dir", Dep.bootDir tbRmBootComponents),
-      ("boot entry", Dep.bootEntry tbRmBootComponents),
-      ("lockfile", Dep.lockfile tbRmDep)
-    ]
+  if Dep.rootDir tbRmDep /= Just "/usr"
+    then
+      mapM_
+        (uncurry (rmComponent depId))
+        [ ("root dir", Dep.rootDir tbRmDep),
+          ("boot dir", Dep.bootDir tbRmBootComponents),
+          ("boot entry", Dep.bootEntry tbRmBootComponents),
+          ("lockfile", Dep.lockfile tbRmDep)
+        ]
+    else
+      Util.printInfo ("Can't remove currently used deployment " <> show (Dep.identifier tbRmDep) <> "!") (Config.interactive conf)
   where
     depId = Dep.identifier deployment
     tbRmDep' =
