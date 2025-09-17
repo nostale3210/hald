@@ -27,5 +27,6 @@ deploymentErasureAssembly depId conf msgCont = do
     (Config.interactive conf)
   Util.printProgress msgCont ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
+  Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf <> "/" <> show (Dep.identifier tbRmDep) <> "/usr/local"
   Space.rmDep tbRmDep conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
