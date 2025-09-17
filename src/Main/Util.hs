@@ -122,7 +122,7 @@ acquireLock fp = do
   case lockRes of
     Just _ -> return True
     Nothing -> do
-      putStrLn "Waiting to acquire lock..."
+      C.putStrLn $ C.pack "Waiting to acquire lock..."
       _ <- lockFile fp Exclusive
       return True
 
@@ -206,13 +206,13 @@ printProgress :: MessageContainer -> String -> IO ()
 printProgress msgCont status =
   if interactive msgCont
     then Stm.atomically $ Stm.writeTChan (channel msgCont) status
-    else putStrLn $ "[Progress] " <> status
+    else C.putStrLn . C.pack $ "[Progress] " <> status
 
 printInfo :: String -> Bool -> IO ()
 printInfo status interactive =
   if interactive
-    then putStrLn $ "\r\ESC[K[Info] " <> status
-    else putStrLn $ "[Info] " <> status
+    then C.putStrLn . C.pack $ "\r\ESC[K[Info] " <> status
+    else C.putStrLn . C.pack $ "[Info] " <> status
 
 printChannelMsg :: Stm.TChan String -> C.ByteString -> IO ()
 printChannelMsg channel bar = do
