@@ -15,11 +15,11 @@ depends() {
 }
 
 install() {
-    
+
     inst_multiple /usr/libexec/ald-boot.sh \
         "$systemdsystemunitdir"/ald-boot.service \
         hald
-    
+
     $SYSTEMCTL -q --root "$initdir" enable ald-boot.service
 
     # Dependencies

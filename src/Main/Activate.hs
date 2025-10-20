@@ -57,8 +57,8 @@ activateNewRoot root newDep hp = do
   when (oldId /= newId) $ do
     Util.ensureDirExists $ root <> "/usr"
     Util.ensureDirExists $ root <> "/etc"
-    exchPaths (root <> "/usr") (newRoot <> "/usr")
     blockSignals signalsToBlock
+    exchPaths (root <> "/usr") (newRoot <> "/usr")
     exchPaths (root <> "/etc") (newRoot <> "/etc")
     movePath newRoot (hp <> "/" <> show oldId)
     unblockSignals signalsToBlock
