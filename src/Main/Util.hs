@@ -58,6 +58,15 @@ ensureDirExists dir = do
              in printInfo ("Couldn't create missing directory " <> dir <> "; " <> err) False
         )
 
+isMountpoint :: FilePath -> IO Bool
+isMountpoint path =
+  catch
+    (callCommand ("mountpoint -q " <> path) >> return True)
+    ( \e ->
+        let _ = show (e :: IOException)
+         in return False
+    )
+
 recursiveFileSearch :: FilePath -> FilePath -> IO [FilePath]
 recursiveFileSearch rootDir fileName = do
   dirContents <- listDirectory rootDir

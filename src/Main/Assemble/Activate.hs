@@ -1,5 +1,6 @@
 module Main.Assemble.Activate where
 
+import Control.Monad (unless)
 import Main.Activate qualified as Activate
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
@@ -18,6 +19,7 @@ deploymentActivationAssembly :: Int -> Config.Config -> Util.MessageContainer ->
 deploymentActivationAssembly newDepId conf msgCont = do
   Util.printInfo ("Activating deployment " <> show newDepId <> "...") (Util.interactive msgCont)
   Util.printProgress msgCont ("Activating deployment " <> show newDepId <> "...")
+  haldMounted <- Util.isMountpoint (Config.haldPath conf)
 
   newDep <-
     Dep.getDeployment
@@ -25,16 +27,12 @@ deploymentActivationAssembly newDepId conf msgCont = do
       (Config.rootDir conf)
       (Config.haldPath conf)
       (Config.bootPath conf)
-  Lock.unlockRoot root
-  Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
-  Lock.umountDirForcibly Lock.Rfl $ root <> "usr"
+  unless
+    haldMounted
+    (Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf)
   Activate.activateNewRoot
     (Config.rootDir conf)
     newDep
-    (Config.haldPath conf)
-  Lock.roBindMountDirToSelf Lock.Ro $ root <> "usr"
-  Lock.roBindMountDirToSelf Lock.Rw $ root <> "usr/local"
-  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
-  Lock.lockRoot root
+  Lock.roRemountDir Lock.Rw $ root <> "etc"
   where
     root = Config.rootDir conf <> "/"

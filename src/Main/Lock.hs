@@ -22,10 +22,12 @@ instance Show ReadMode where
 data RecursiveUmount
   = Rfl
   | Simple
+  | Fl
 
 instance Show RecursiveUmount where
   show Rfl = "Rfl"
   show Simple = "f"
+  show Fl = "fl"
 
 setIPath :: Immutable -> FilePath -> IO ()
 setIPath mode fp =
@@ -59,6 +61,23 @@ roBindMountDirToSelf readMode dirPath =
     ( \e ->
         let err = show (e :: IOException)
          in putStrLn $ "Failed to bind mount " <> dirPath <> "; " <> err
+    )
+
+roRemountDir :: ReadMode -> FilePath -> IO ()
+roRemountDir readMode dirPath =
+  catch
+    ( callCommand
+        ( "mountpoint "
+            <> dirPath
+            <> " &>/dev/null && mount -o remount,"
+            <> show readMode
+            <> " "
+            <> dirPath
+        )
+    )
+    ( \e ->
+        let err = show (e :: IOException)
+         in putStrLn $ "Failed to remount mount " <> dirPath <> "; " <> err
     )
 
 umountDirForcibly :: RecursiveUmount -> FilePath -> IO ()

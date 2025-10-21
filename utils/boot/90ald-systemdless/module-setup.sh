@@ -17,7 +17,8 @@ depends() {
 install() {
 
     inst_multiple /usr/libexec/ald-boot.sh \
-        hald
+        hald \
+        move-mount
 
     inst_hook pre-pivot 40 "$moddir/ald-hook.sh"
 

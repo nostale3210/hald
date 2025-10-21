@@ -3,6 +3,7 @@ module Main.Activate where
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Main.Deployment qualified as Dep
+import Main.Lock qualified as Lock
 import Main.Util qualified as Util
 import System.Directory
 import System.Posix.Signals (addSignal, blockSignals, emptySignalSet, raiseSignal, sigINT, sigTERM, unblockSignals)
@@ -40,8 +41,38 @@ movePath oldPath newPath =
               >> raiseSignal sigTERM
     )
 
-activateNewRoot :: FilePath -> Dep.Deployment -> FilePath -> IO ()
-activateNewRoot root newDep hp = do
+delegateMount :: FilePath -> FilePath -> IO ()
+delegateMount fromPath toPath =
+  catch
+    (callCommand ("move-mount -db " <> fromPath <> " " <> toPath <> " &>/dev/null"))
+    ( \e ->
+        let err = show (e :: IOException)
+         in putStrLn err
+              >> raiseSignal sigTERM
+    )
+
+privateMount :: FilePath -> IO ()
+privateMount path =
+  catch
+    (callCommand ("mount --make-private " <> path))
+    ( \e ->
+        let err = show (e :: IOException)
+         in putStrLn err
+              >> raiseSignal sigTERM
+    )
+
+bindMount :: FilePath -> FilePath -> IO ()
+bindMount fromPath toPath =
+  catch
+    (callCommand ("mount -o bind " <> fromPath <> " " <> toPath))
+    ( \e ->
+        let err = show (e :: IOException)
+         in putStrLn err
+              >> raiseSignal sigTERM
+    )
+
+activateNewRoot :: FilePath -> Dep.Deployment -> IO ()
+activateNewRoot root newDep = do
   idFileContent <-
     catch
       (readFile (root <> "/usr/.ald_dep"))
@@ -53,12 +84,23 @@ activateNewRoot root newDep hp = do
   let oldId = read (head $ words idFileContent) :: Int
       newId = Dep.identifier newDep
       signalsToBlock = addSignal sigTERM . addSignal sigINT $ emptySignalSet
+  usrMounted <- Util.isMountpoint $ root <> "/usr"
+  etcMounted <- Util.isMountpoint $ root <> "/etc"
   newRoot <- getNewRoot newDep
   when (oldId /= newId) $ do
     Util.ensureDirExists $ root <> "/usr"
     Util.ensureDirExists $ root <> "/etc"
     blockSignals signalsToBlock
-    exchPaths (root <> "/usr") (newRoot <> "/usr")
-    exchPaths (root <> "/etc") (newRoot <> "/etc")
-    movePath newRoot (hp <> "/" <> show oldId)
+    if usrMounted
+      then
+        privateMount (root <> "/usr")
+          >> delegateMount (newRoot <> "/usr") (root <> "/usr")
+          >> Lock.umountDirForcibly Lock.Fl (root <> "/usr")
+      else bindMount (newRoot <> "/usr") (root <> "/usr")
+    if etcMounted
+      then
+        privateMount (root <> "/etc")
+          >> delegateMount (newRoot <> "/etc") (root <> "/etc")
+          >> Lock.umountDirForcibly Lock.Fl (root <> "/etc")
+      else bindMount (newRoot <> "/etc") (root <> "/etc")
     unblockSignals signalsToBlock

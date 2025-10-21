@@ -18,7 +18,8 @@ install() {
 
     inst_multiple /usr/libexec/ald-boot.sh \
         "$systemdsystemunitdir"/ald-boot.service \
-        hald
+        hald \
+        move-mount
 
     $SYSTEMCTL -q --root "$initdir" enable ald-boot.service
 
