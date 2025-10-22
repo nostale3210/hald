@@ -11,7 +11,7 @@ import System.Directory
 import System.Environment (getArgs, getExecutablePath)
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory)
-import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT)
+import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Process (callCommand)
 
 data MessageContainer
@@ -84,8 +84,8 @@ recursiveFileSearch rootDir fileName = do
             then recursiveFileSearch path fileName
             else return []
 
-relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
-relabelSeLinuxPath rootPath contexts relabelDir bp = do
+relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
+relabelSeLinuxPath rootPath contexts bp = do
   catch
     ( callCommand
         ( "restorecon -RF "
@@ -93,25 +93,29 @@ relabelSeLinuxPath rootPath contexts relabelDir bp = do
         )
     )
     ( \e ->
-        let err = show (e :: IOException)
+        let _ = show (e :: IOException)
          in printInfo "Relabeling boot directory failed." False
-              >> error err
+              >> raiseSignal sigTERM
     )
   catch
     ( callCommand
-        ( "setfiles -F -T \"$((\"$(nproc --all)\"/2))\" -r "
+        ( "ln -s usr/lib "
             <> rootPath
-            <> " "
+            <> "/lib &&"
+            <> "ln -s usr/lib64 "
+            <> rootPath
+            <> "/lib64 && "
+            <> "chroot "
+            <> rootPath
+            <> " /usr/bin/setfiles -F -T \"$((\"$(nproc --all)\"/2))\" "
             <> contexts
-            <> " "
-            <> relabelDir
-            <> " 2>/dev/null"
+            <> " / 2>/dev/null || :"
         )
     )
     ( \e ->
-        let err = show (e :: IOException)
+        let _ = show (e :: IOException)
          in printInfo "Relabeling root directory failed." False
-              >> error err
+              >> raiseSignal sigTERM
     )
 
 getUserId :: IO Int

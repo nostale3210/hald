@@ -69,6 +69,7 @@ syncImage fp hp =
     >> syncImageStructure fp hp
     >> syncImageBatched fp hp
     >> trimImageLeftovers fp hp
+    >> setImageEtcTime hp
 
 syncImageStructure :: FilePath -> FilePath -> IO ()
 syncImageStructure fp hp =
@@ -117,6 +118,18 @@ trimImageLeftovers fp hp =
             <> "sed -z \"s|^|"
             <> hp
             <> "/image|g\" | xargs -0 rm -rf &>/dev/null"
+        )
+    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+
+setImageEtcTime :: FilePath -> IO ()
+setImageEtcTime hp =
+  catch
+    ( callCommand
+        ( "find "
+            <> hp
+            <> "/image/etc -mindepth 1 "
+            <> "-execdir sh -c \"touch -d @0 '{}' &>/dev/null || :\" \\;"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)

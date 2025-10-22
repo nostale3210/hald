@@ -70,12 +70,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb = do
       Util.printProgress msgCont ("Relabeling deployment " <> show (Dep.identifier newDep) <> "...")
       Util.relabelSeLinuxPath
         (Config.haldPath pbConf <> "/" <> show (Dep.identifier newDep))
-        ( Config.haldPath pbConf
-            <> "/"
-            <> show (Dep.identifier newDep)
-            <> "/etc/selinux/targeted/contexts/files/file_contexts"
-        )
-        (Config.haldPath pbConf <> "/" <> show (Dep.identifier newDep))
+        "/etc/selinux/targeted/contexts/files/file_contexts"
         (Config.bootPath pbConf)
 
     when sb $ do

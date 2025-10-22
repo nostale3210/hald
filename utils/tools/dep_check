@@ -109,6 +109,7 @@ optionals=(
     "man:setfiles"
     "rpm:"
     "systemd-inhibit:"
+    "chroot:"
 )
 declare -n optional=optionals
 
