@@ -5,6 +5,7 @@ import Data.Maybe qualified
 import Main.Config qualified as Config
 import Main.Container qualified as Container
 import Main.Deployment qualified as Dep
+import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import System.Posix.Signals (Handler (..), Signal, SignalInfo (siginfoSignal), installHandler, signalProcess)
 import System.Process (Pid, getCurrentPid)
@@ -14,6 +15,7 @@ failAndCleanup dep conf = do
   unless (Dep.identifier dep == -1) $ Space.rmDep dep conf
   Container.umountContainer "ald-root"
   Container.rmContainer "ald-root"
+  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
 
 genericTerminationHandler :: Config.Config -> Pid -> Maybe Dep.Deployment -> Handler
 genericTerminationHandler conf pid dep = CatchInfoOnce $ \signalInfo -> do
