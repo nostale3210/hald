@@ -32,6 +32,7 @@ deploymentActivationAssembly newDepId conf msgCont = do
     (Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf)
   Activate.activateNewRoot
     (Config.rootDir conf)
+    (Config.haldPath conf)
     newDep
   Lock.roRemountDir Lock.Rw $ root <> "etc"
   where

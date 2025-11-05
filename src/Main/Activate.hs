@@ -51,6 +51,29 @@ delegateMount fromPath toPath =
               >> raiseSignal sigTERM
     )
 
+moveOMount :: FilePath -> FilePath -> FilePath -> IO ()
+moveOMount hp fromPath toPath =
+  catch
+    ( callCommand
+        ( "mount -t overlay overlay --make-private -o lowerdir="
+            <> fromPath
+            <> ":"
+            <> (hp <> "/empty")
+            <> " "
+            <> fromPath
+            <> " && move-mount -mb "
+            <> fromPath
+            <> " "
+            <> toPath
+            <> " &>/dev/null"
+        )
+    )
+    ( \e ->
+        let err = show (e :: IOException)
+         in putStrLn err
+              >> raiseSignal sigTERM
+    )
+
 privateMount :: FilePath -> IO ()
 privateMount path =
   catch
@@ -64,15 +87,15 @@ privateMount path =
 bindMount :: FilePath -> FilePath -> IO ()
 bindMount fromPath toPath =
   catch
-    (callCommand ("mount -o bind " <> fromPath <> " " <> toPath))
+    (callCommand ("mount -o bind --make-private " <> fromPath <> " " <> toPath))
     ( \e ->
         let err = show (e :: IOException)
          in putStrLn err
               >> raiseSignal sigTERM
     )
 
-activateNewRoot :: FilePath -> Dep.Deployment -> IO ()
-activateNewRoot root newDep = do
+activateNewRoot :: FilePath -> FilePath -> Dep.Deployment -> IO ()
+activateNewRoot root hp newDep = do
   idFileContent <-
     catch
       (readFile (root <> "/usr/.ald_dep"))
@@ -90,11 +113,12 @@ activateNewRoot root newDep = do
   when (oldId /= newId) $ do
     Util.ensureDirExists $ root <> "/usr"
     Util.ensureDirExists $ root <> "/etc"
+    privateMount hp
     blockSignals signalsToBlock
     if usrMounted
       then
         privateMount (root <> "/usr")
-          >> delegateMount (newRoot <> "/usr") (root <> "/usr")
+          >> moveOMount hp (newRoot <> "/usr") (root <> "/usr")
           >> Lock.umountDirForcibly Lock.Fl (root <> "/usr")
       else bindMount (newRoot <> "/usr") (root <> "/usr")
     if etcMounted

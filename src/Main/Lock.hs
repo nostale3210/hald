@@ -52,7 +52,7 @@ roBindMountDirToSelf readMode dirPath =
             <> dirPath
             <> " &>/dev/null || mount -o bind,"
             <> show readMode
-            <> " "
+            <> " --make-private "
             <> dirPath
             <> " "
             <> dirPath

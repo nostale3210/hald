@@ -72,6 +72,7 @@ pullImage podUri = do
 syncImage :: FilePath -> FilePath -> IO ()
 syncImage fp hp =
   Util.ensureDirExists (hp <> "/image")
+    >> Util.ensureDirExists (hp <> "/empty")
     >> syncImageStructure fp hp
     >> syncImageBatched fp hp
     >> trimImageLeftovers fp hp
