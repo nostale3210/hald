@@ -74,6 +74,24 @@ moveOMount hp fromPath toPath =
               >> raiseSignal sigTERM
     )
 
+usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
+usrOverlayMount hp fromPath toPath =
+  catch
+    ( callCommand
+        ( "mount -t overlay overlay --make-private -o lowerdir="
+            <> fromPath
+            <> ":"
+            <> (hp <> "/empty")
+            <> " "
+            <> toPath
+        )
+    )
+    ( \e ->
+        let err = show (e :: IOException)
+         in putStrLn err
+              >> raiseSignal sigTERM
+    )
+
 privateMount :: FilePath -> IO ()
 privateMount path =
   catch
@@ -120,7 +138,7 @@ activateNewRoot root hp newDep = do
         privateMount (root <> "/usr")
           >> moveOMount hp (newRoot <> "/usr") (root <> "/usr")
           >> Lock.umountDirForcibly Lock.Fl (root <> "/usr")
-      else bindMount (newRoot <> "/usr") (root <> "/usr")
+      else usrOverlayMount hp (newRoot <> "/usr") (root <> "/usr")
     if etcMounted
       then
         privateMount (root <> "/etc")
