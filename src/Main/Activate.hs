@@ -15,32 +15,6 @@ getNewRoot nextDep =
     Nothing -> raiseSignal sigTERM >> return "Defective"
     Just x -> return x
 
-exchPaths :: FilePath -> FilePath -> IO ()
-exchPaths oldPath newPath =
-  catch
-    ( callCommand
-        ( "exch "
-            <> oldPath
-            <> " "
-            <> newPath
-        )
-    )
-    ( \e ->
-        let err = show (e :: IOException)
-         in putStrLn err
-              >> raiseSignal sigTERM
-    )
-
-movePath :: FilePath -> FilePath -> IO ()
-movePath oldPath newPath =
-  catch
-    (renameDirectory oldPath newPath)
-    ( \e ->
-        let err = show (e :: IOException)
-         in putStrLn err
-              >> raiseSignal sigTERM
-    )
-
 delegateMount :: FilePath -> FilePath -> IO ()
 delegateMount fromPath toPath =
   catch
@@ -55,13 +29,7 @@ moveOMount :: FilePath -> FilePath -> FilePath -> IO ()
 moveOMount hp fromPath toPath =
   catch
     ( callCommand
-        ( "mount -t overlay overlay --make-private -o lowerdir="
-            <> fromPath
-            <> ":"
-            <> (hp <> "/empty")
-            <> " "
-            <> fromPath
-            <> " && move-mount -mb "
+        ( "move-mount -mb "
             <> fromPath
             <> " "
             <> toPath
@@ -78,7 +46,7 @@ usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
 usrOverlayMount hp fromPath toPath =
   catch
     ( callCommand
-        ( "mount -t overlay overlay --make-private -o lowerdir="
+        ( "mount -t overlay usr-root --make-private -o lowerdir="
             <> fromPath
             <> ":"
             <> (hp <> "/empty")
@@ -129,13 +97,12 @@ activateNewRoot root hp newDep = do
   etcMounted <- Util.isMountpoint $ root <> "/etc"
   newRoot <- getNewRoot newDep
   when (oldId /= newId) $ do
-    Util.ensureDirExists $ root <> "/usr"
-    Util.ensureDirExists $ root <> "/etc"
     privateMount hp
     blockSignals signalsToBlock
     if usrMounted
       then
         privateMount (root <> "/usr")
+          >> usrOverlayMount hp (newRoot <> "/usr") (newRoot <> "/usr")
           >> moveOMount hp (newRoot <> "/usr") (root <> "/usr")
           >> Lock.umountDirForcibly Lock.Fl (root <> "/usr")
       else usrOverlayMount hp (newRoot <> "/usr") (root <> "/usr")
