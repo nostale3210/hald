@@ -76,6 +76,7 @@ syncImage fp hp =
     >> syncImageStructure fp hp
     >> syncImageBatched fp hp
     >> trimImageLeftovers fp hp
+    >> setImageEtcTime hp
 
 syncImageStructure :: FilePath -> FilePath -> IO ()
 syncImageStructure fp hp =
