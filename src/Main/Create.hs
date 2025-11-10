@@ -124,24 +124,19 @@ syncMinimumState hp =
             <> "/etc/adjtime /etc/sudoers.d /etc/group /etc/gshadow /etc/subgid /etc/subuid "
             <> "/etc/NetworkManager/system-connections /etc/vconsole.conf /etc/pki "
             <> "/etc/firewalld /etc/environment /etc/hostname "
-            <> "/etc/X11/xorg.conf.d/00-keyboard.conf /etc/sudoers /etc/hald /etc/machine-id"
+            <> "/etc/X11/xorg.conf.d/00-keyboard.conf /etc/sudoers /etc/hald /etc/machine-id "
+            <> "/etc/X11/xinit/xinput.d/ibus.conf"
         )
     )
     (hp <> "/image/")
 
 syncState :: Config.Config -> IO ()
 syncState conf =
-  let syncCmd = "cp -rfa --parents \"$@\" " <> Config.haldPath conf <> "/image/"
-      statA = "xargs -I{} -P\"$((\"$(nproc --all)\"/2))\" stat --printf \"%Y\\t%n\\0\" {} 2>/dev/null | "
-      xBashC = "xargs -0 -I{} -P\"$((\"$(nproc --all)\"/2))\" "
-      testTsD = "bash -c 'test \"$(echo {} | cut -d\" \" -f1)\" == 0 || echo {}' | cut -d\" \" -f2 | "
-      xargsSync = "xargs -n1 bash -c '" <> syncCmd <> "' _"
+  let syncCmd = "cp -rfa --parents \"$@\" " <> Config.haldPath conf <> "/image/ &>/dev/null || :"
+      xargsSync = "xargs -n1 -P\"$((\"$(nproc --all)\"/2))\" bash -c '" <> syncCmd <> "' _"
    in catch
         ( callCommand
-            ( "find /etc ! -type d | "
-                <> statA
-                <> xBashC
-                <> testTsD
+            ( "find /etc ! -type d -newermt @0 | "
                 <> xargsSync
             )
         )
