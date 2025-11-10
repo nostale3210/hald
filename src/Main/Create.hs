@@ -124,7 +124,7 @@ syncMinimumState hp =
             <> "/etc/adjtime /etc/sudoers.d /etc/group /etc/gshadow /etc/subgid /etc/subuid "
             <> "/etc/NetworkManager/system-connections /etc/vconsole.conf /etc/pki "
             <> "/etc/firewalld /etc/environment /etc/hostname "
-            <> "/etc/X11/xorg.conf.d/00-keyboard.conf /etc/sudoers /etc/hald"
+            <> "/etc/X11/xorg.conf.d/00-keyboard.conf /etc/sudoers /etc/hald /etc/machine-id"
         )
     )
     (hp <> "/image/")
