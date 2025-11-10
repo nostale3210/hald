@@ -18,13 +18,13 @@ createSkeleton depId conf =
 createBootEntry :: Int -> Config.Config -> IO ()
 createBootEntry depId conf = do
   Util.ensureDirExists $ Config.bootPath conf <> "/loader/entries"
-  bootTemplateExists <- Util.pathExists (Config.haldPath conf <> "/boot.conf")
+  bootTemplateExists <- Util.pathExists (Config.configPath conf <> "/boot.conf")
   if bootTemplateExists
     then do
       templateContent <-
         catch
           ( readFile $
-              Config.haldPath conf <> "/boot.conf"
+              Config.configPath conf <> "/boot.conf"
           )
           ( \e ->
               let err = show (e :: IOException)
@@ -45,7 +45,7 @@ createBootEntry depId conf = do
     else
       error
         ( "No boot entry template found, make sure it exists at "
-            <> Config.haldPath conf
+            <> Config.configPath conf
             <> "/boot.conf"
         )
 
