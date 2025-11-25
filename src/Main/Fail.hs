@@ -1,14 +1,17 @@
 module Main.Fail where
 
+import Control.Concurrent qualified as Conc
+import Control.Exception (catch)
 import Control.Monad (unless)
 import Data.Maybe qualified
+import GHC.IO.Exception (IOException)
 import Main.Config qualified as Config
 import Main.Container qualified as Container
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import System.Posix.Signals (Handler (..), Signal, SignalInfo (siginfoSignal), installHandler, signalProcess)
-import System.Process (Pid, getCurrentPid)
+import System.Process (Pid, callCommand, getCurrentPid)
 
 failAndCleanup :: Dep.Deployment -> Config.Config -> IO ()
 failAndCleanup dep conf = do
@@ -24,6 +27,12 @@ genericTerminationHandler conf pid dep = CatchInfoOnce $ \signalInfo -> do
       <> show (siginfoSignal signalInfo)
       <> "\nExecution interrupted!"
       <> "\nAttempting cleanup of broken deployments..."
+  catch
+    (callCommand ("umount -Rfl " <> Config.haldPath conf <> "/" <> show (Dep.identifier pending) <> Config.bootPath conf <> " 2>/dev/null"))
+    ( \e ->
+        let _ = show (e :: IOException)
+         in putStr ""
+    )
   deployments <-
     Dep.getDeploymentsInt
       (Config.haldPath conf)

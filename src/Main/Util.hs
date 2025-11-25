@@ -85,38 +85,78 @@ recursiveFileSearch rootDir fileName = do
             else return []
 
 relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
-relabelSeLinuxPath rootPath contexts bp = do
-  catch
-    ( callCommand
-        ( "restorecon -RF "
-            <> bp
-        )
-    )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in printInfo "Relabeling boot directory failed." False
-              >> raiseSignal sigTERM
-    )
-  catch
-    ( callCommand
-        ( "ln -s usr/lib "
-            <> rootPath
-            <> "/lib &&"
-            <> "ln -s usr/lib64 "
-            <> rootPath
-            <> "/lib64 && "
-            <> "chroot "
-            <> rootPath
-            <> " /usr/bin/setfiles -F -T \"$((\"$(nproc --all)\"/2))\" "
-            <> contexts
-            <> " / 2>/dev/null || :"
-        )
-    )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in printInfo "Relabeling root directory failed." False
-              >> raiseSignal sigTERM
-    )
+relabelSeLinuxPath rootPath contexts bp =
+  do
+    catch
+      (ensureDirExists (rootPath <> bp))
+      ( \e ->
+          let _ = show (e :: IOException)
+           in printInfo "Relabeling boot directory failed." False
+                >> raiseSignal sigTERM
+      )
+    catch
+      ( callCommand
+          ( "mount --bind "
+              <> bp
+              <> " "
+              <> (rootPath <> bp)
+          )
+      )
+      ( \e ->
+          let _ = show (e :: IOException)
+           in printInfo "Relabeling boot directory failed." False
+                >> raiseSignal sigTERM
+      )
+    catch
+      ( callCommand
+          ( "ln -sf usr/lib "
+              <> rootPath
+              <> "/lib && "
+              <> "ln -sf usr/lib64 "
+              <> rootPath
+              <> "/lib64 && "
+              <> "chroot "
+              <> rootPath
+              <> " restorecon -RF "
+              <> bp
+          )
+      )
+      ( \e ->
+          let _ = show (e :: IOException)
+           in printInfo "Relabeling boot directory failed." False
+                >> raiseSignal sigTERM
+      )
+    catch
+      ( callCommand
+          ( "umount -Rfl "
+              <> (rootPath <> bp)
+          )
+      )
+      ( \e ->
+          let _ = show (e :: IOException)
+           in printInfo "Relabeling boot directory failed." False
+                >> raiseSignal sigTERM
+      )
+    catch
+      ( callCommand
+          ( "ln -sf usr/lib "
+              <> rootPath
+              <> "/lib && "
+              <> "ln -sf usr/lib64 "
+              <> rootPath
+              <> "/lib64 && "
+              <> "chroot "
+              <> rootPath
+              <> " /usr/bin/setfiles -F -T \"$((\"$(nproc --all)\"/2))\" "
+              <> contexts
+              <> " / 2>/dev/null || :"
+          )
+      )
+      ( \e ->
+          let _ = show (e :: IOException)
+           in printInfo "Relabeling root directory failed." False
+                >> raiseSignal sigTERM
+      )
 
 getUserId :: IO Int
 getUserId =
