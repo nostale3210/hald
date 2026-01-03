@@ -1,8 +1,8 @@
 name: build-hald-utils
 on:
   pull_request:
-  #  schedule:
-  #    - cron: '0 0 * * 0'
+    schedule:
+      - cron: '0 0 1 1/2 *'
   push:
     branches:
       - "main"
