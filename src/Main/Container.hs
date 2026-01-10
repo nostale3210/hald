@@ -136,7 +136,7 @@ setImageEtcTime hp =
         ( "find "
             <> hp
             <> "/image/etc -mindepth 1 "
-            <> "-execdir sh -c \"touch -d @0 '{}' &>/dev/null || :\" \\;"
+            <> "-execdir sh -c \"touch -d 1970-01-01T01:00:00 '{}' &>/dev/null || :\" \\;"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)

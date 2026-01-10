@@ -136,7 +136,7 @@ syncState conf =
       xargsSync = "xargs -n1 -P\"$((\"$(nproc --all)\"/2))\" bash -c '" <> syncCmd <> "' _"
    in catch
         ( callCommand
-            ( "touch -d \"1970-01-01 01:00:00\" "
+            ( "touch -d 1970-01-01T01:00:00 "
                 <> Config.configPath conf
                 <> "/.stamp &&"
                 <> "find /etc ! -type d -newer "

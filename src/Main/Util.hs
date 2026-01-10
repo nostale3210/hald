@@ -228,7 +228,7 @@ checkInteractive =
 checkSystemdInhibit :: IO Bool
 checkSystemdInhibit =
   catch
-    ( callCommand "systemd-inhibit --who=\"hald\" --what=\"idle\" sleep 0.01 &>/dev/null"
+    ( callCommand "command -v systemd-inhibit >/dev/null 2>&1"
         >> return True
     )
     ( \e ->
