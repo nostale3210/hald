@@ -97,11 +97,11 @@ syncImageBatched fp hp =
     ( callCommand
         ( "find "
             <> fp
-            <> "/{usr,etc} ! -type d -printf \"%s\\t%p\\0\" | sort -znr | cut -z -f2- | "
-            <> "sed -z \"s|^\\("
+            <> "/{usr,etc} ! -type d -printf \"%s\\t%p\\n\" | sort -nr | cut -f2- | "
+            <> "sed \"s|^\\("
             <> fp
-            <> "\\)|\\1/.|g\" | xargs -0 -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
-            <> "bash -c 'rsync -aHlcx --delete --relative \"$@\" "
+            <> "\\)|\\1/.|g\" | xargs -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
+            <> "bash -c 'rsync -aHlcx --delete --relative --ignore-missing-args \"$@\" "
             <> hp
             <> "/image/ &>/dev/null' _ &>/dev/null"
         )
@@ -112,19 +112,19 @@ trimImageLeftovers :: FilePath -> FilePath -> IO ()
 trimImageLeftovers fp hp =
   catch
     ( callCommand
-        ( "comm -z23 <(find "
+        ( "comm -23 <(find "
             <> hp
-            <> "/image/{usr,etc} -print0 | sed -z \"s|^"
+            <> "/image/{usr,etc} | sed \"s|^"
             <> hp
-            <> "/image||g\" | sort -z) "
+            <> "/image||g\" | sort) "
             <> "<(find "
             <> fp
-            <> "/{usr,etc} -print0 | sed -z \"s|^"
+            <> "/{usr,etc} | sed \"s|^"
             <> fp
-            <> "||g\" | sort -z) | "
-            <> "sed -z \"s|^|"
+            <> "||g\" | sort) | "
+            <> "sed \"s|^|"
             <> hp
-            <> "/image|g\" | xargs -0 rm -rf &>/dev/null"
+            <> "/image|g\" | xargs rm -rf &>/dev/null"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
@@ -139,4 +139,4 @@ setImageEtcTime hp =
             <> "-execdir sh -c \"touch -d 1970-01-01T01:00:00 '{}' &>/dev/null || :\" \\;"
         )
     )
-    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+    (\e -> let _ = show (e :: IOException) in putStrLn "ETCTime" >> raiseSignal sigTERM)
