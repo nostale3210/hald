@@ -9,10 +9,10 @@ mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
   catch
     (callCommand ("podman create --replace --name " <> podName <> " " <> podUri <> " >/dev/null 2>&1"))
-    (\e -> let err = show (e :: IOException) in error err)
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
     >> catch
       (readProcess "podman" ["mount", "ald-root"] [])
-      (\e -> let err = show (e :: IOException) in error err)
+      (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM >> return "failed")
     >>= \podMount -> return $ Util.removeString "\n" podMount
 
 umountContainer :: String -> IO ()

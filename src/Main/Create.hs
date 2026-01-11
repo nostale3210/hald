@@ -132,7 +132,7 @@ syncMinimumState hp =
 
 syncState :: Config.Config -> IO ()
 syncState conf =
-  let syncCmd = "cp -rfa --parents \"$@\" " <> Config.haldPath conf <> "/image/ >/dev/null 2>&1 || :"
+  let syncCmd = "rsync -aRI \"$@\" " <> Config.haldPath conf <> "/image/ >/dev/null 2>&1 || :"
       xargsSync = "xargs -n1 -P\"$((\"$(nproc --all)\"/2))\" bash -c '" <> syncCmd <> "' _"
    in catch
         ( callCommand
@@ -161,7 +161,7 @@ syncSingleFile files destination
         ( \y ->
             catch
               ( callCommand
-                  ( "cp -rfa --parents "
+                  ( "rsync -aRI  "
                       <> y
                       <> " "
                       <> destination
