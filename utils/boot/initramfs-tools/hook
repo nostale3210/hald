@@ -2,10 +2,6 @@
 
 . /usr/share/initramfs-tools/hook-functions
 
-if [ ! -x "/usr/libexec/ald-boot.sh" ]; then
-    exit 0
-fi
-copy_exec /usr/libexec/ald-boot.sh /usr/libexec
 copy_exec /usr/bin/hald /usr/bin
 copy_exec /usr/bin/move-mount /usr/bin
 copy_exec /usr/bin/bash /usr/bin
@@ -21,3 +17,7 @@ copy_exec /usr/bin/mv /usr/bin
 copy_exec /usr/bin/printf /usr/bin
 copy_exec /usr/bin/rm /usr/bin
 copy_exec /usr/bin/umount /usr/bin
+copy_exec /usr/bin/sleep /usr/bin
+copy_exec /usr/bin/tr /usr/bin
+
+manual_add_modules overlay

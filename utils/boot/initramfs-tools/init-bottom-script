@@ -1,3 +1,21 @@
 #!/bin/sh
 
-/usr/libexec/ald-boot.sh "${rootmnt}"
+PREREQ=""
+prereqs()
+{
+    echo "$PREREQ"
+}
+case $1 in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+mount -o remount,rw "$rootmnt"
+[ ! -d "$rootmnt/usr" ] && chattr -i "$rootmnt/" && mkdir -p "$rootmnt/usr"
+[ ! -d "$rootmnt/etc" ] && chattr -i "$rootmnt/" && mkdir -p "$rootmnt/etc"
+
+deployment="$(cat /proc/cmdline | tr " " "\n" | grep "ald.boot=" | sed "s/ald.boot=\(.*\)/\1/")"
+
+hald activate "$deployment" --rootd "$rootmnt"
