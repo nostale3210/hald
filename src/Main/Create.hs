@@ -132,7 +132,7 @@ syncMinimumState hp =
 
 syncState :: Config.Config -> IO ()
 syncState conf =
-  let syncCmd = "cp -rfa --parents \"$@\" " <> Config.haldPath conf <> "/image/ &>/dev/null || :"
+  let syncCmd = "cp -rfa --parents \"$@\" " <> Config.haldPath conf <> "/image/ >/dev/null 2>&1 || :"
       xargsSync = "xargs -n1 -P\"$((\"$(nproc --all)\"/2))\" bash -c '" <> syncCmd <> "' _"
    in catch
         ( callCommand
@@ -186,7 +186,7 @@ hardlinkDep deployment hp = do
             <> hp
             <> "/."
             <> show (Dep.identifier deployment)
-            <> " &>/dev/null"
+            <> " >/dev/null 2>&1"
         )
     )
     ( \e ->

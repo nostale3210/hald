@@ -187,7 +187,7 @@ signKernel bp dep =
             then
               catch
                 ( callCommand
-                    ("sbctl sign " <> kernelPath <> " &>/dev/null")
+                    ("sbctl sign " <> kernelPath <> " >/dev/null 2>&1")
                     >> return True
                 )
                 ( \e ->

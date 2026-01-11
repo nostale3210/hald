@@ -18,7 +18,7 @@ getNewRoot nextDep =
 delegateMount :: FilePath -> FilePath -> IO ()
 delegateMount fromPath toPath =
   catch
-    (callCommand ("move-mount -db " <> fromPath <> " " <> toPath <> " &>/dev/null"))
+    (callCommand ("move-mount -db " <> fromPath <> " " <> toPath <> " >/dev/null 2>&1"))
     ( \e ->
         let err = show (e :: IOException)
          in putStrLn err
@@ -33,7 +33,7 @@ moveOMount hp fromPath toPath =
             <> fromPath
             <> " "
             <> toPath
-            <> " &>/dev/null"
+            <> " >/dev/null 2>&1"
         )
     )
     ( \e ->

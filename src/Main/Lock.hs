@@ -50,7 +50,7 @@ roBindMountDirToSelf readMode dirPath =
     ( callCommand
         ( "mountpoint "
             <> dirPath
-            <> " &>/dev/null || mount -o bind,"
+            <> " >/dev/null 2>&1 || mount -o bind,"
             <> show readMode
             <> " --make-private "
             <> dirPath
@@ -69,7 +69,7 @@ roRemountDir readMode dirPath =
     ( callCommand
         ( "mountpoint "
             <> dirPath
-            <> " &>/dev/null && mount -o remount,"
+            <> " >/dev/null 2>&1 && mount -o remount,"
             <> show readMode
             <> " "
             <> dirPath
@@ -86,7 +86,7 @@ umountDirForcibly opts dirPath =
     ( callCommand
         ( "mountpoint "
             <> dirPath
-            <> " &>/dev/null && umount -"
+            <> " >/dev/null 2>&1 && umount -"
             <> show opts
             <> " "
             <> dirPath

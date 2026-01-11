@@ -119,7 +119,7 @@ check_bin() {
     cmd="$(cut -d: -f2 <<< "$1" | sed "s/^$/--help/")"
     local -n fail="$2"
 
-    "$bin" "$cmd" &>/dev/null || \
+    "$bin" "$cmd" >/dev/null 2>&1 || \
         if [[ "$bin" == "man" ]]; then fail+=( "$cmd" ); else fail+=( "$bin" ); fi
 }
 

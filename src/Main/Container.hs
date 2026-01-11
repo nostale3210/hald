@@ -8,7 +8,7 @@ import System.Process
 mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
   catch
-    (callCommand ("podman create --replace --name " <> podName <> " " <> podUri <> " &>/dev/null"))
+    (callCommand ("podman create --replace --name " <> podName <> " " <> podUri <> " >/dev/null 2>&1"))
     (\e -> let err = show (e :: IOException) in error err)
     >> catch
       (readProcess "podman" ["mount", "ald-root"] [])
@@ -19,7 +19,7 @@ umountContainer :: String -> IO ()
 umountContainer podName =
   catch
     ( callCommand
-        ("podman unmount " <> podName <> " &>/dev/null")
+        ("podman unmount " <> podName <> " >/dev/null 2>&1")
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -30,7 +30,7 @@ rmContainer :: String -> IO ()
 rmContainer podName =
   catch
     ( callCommand
-        ("podman rm -f " <> podName <> " &>/dev/null")
+        ("podman rm -f " <> podName <> " >/dev/null 2>&1")
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -84,9 +84,11 @@ syncImageStructure fp hp =
     ( callCommand
         ( "rsync -ac -f\"+ */\" -f\"- *\" --delete "
             <> fp
-            <> "/{usr,etc} "
+            <> "/usr "
+            <> fp
+            <> "/etc "
             <> hp
-            <> "/image/ &>/dev/null"
+            <> "/image/ >/dev/null 2>&1"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
@@ -97,13 +99,16 @@ syncImageBatched fp hp =
     ( callCommand
         ( "find "
             <> fp
-            <> "/{usr,etc} ! -type d -printf \"%s\\t%p\\n\" | sort -nr | cut -f2- | "
+            <> "/usr "
+            <> fp
+            <> "/etc "
+            <> "! -type d -printf \"%s\\t%p\\n\" | sort -nr | cut -f2- | "
             <> "sed \"s|^\\("
             <> fp
             <> "\\)|\\1/.|g\" | xargs -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
             <> "bash -c 'rsync -aHlcx --delete --relative --ignore-missing-args \"$@\" "
             <> hp
-            <> "/image/ &>/dev/null' _ &>/dev/null"
+            <> "/image/ >/dev/null 2>&1' _ >/dev/null 2>&1"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
@@ -112,19 +117,26 @@ trimImageLeftovers :: FilePath -> FilePath -> IO ()
 trimImageLeftovers fp hp =
   catch
     ( callCommand
-        ( "comm -23 <(find "
+        ( "find "
             <> hp
-            <> "/image/{usr,etc} | sed \"s|^"
+            <> "/image/usr "
             <> hp
-            <> "/image||g\" | sort) "
-            <> "<(find "
+            <> "/image/etc "
+            <> "| sed \"s|^"
+            <> hp
+            <> "/image||g\" | sort > /tmp/hp && "
+            <> "find "
             <> fp
-            <> "/{usr,etc} | sed \"s|^"
+            <> "/usr "
             <> fp
-            <> "||g\" | sort) | "
+            <> "/etc "
+            <> "| sed \"s|^"
+            <> fp
+            <> "||g\" | sort > /tmp/fp && "
+            <> "comm -23 /tmp/hp /tmp/fp | "
             <> "sed \"s|^|"
             <> hp
-            <> "/image|g\" | xargs rm -rf &>/dev/null"
+            <> "/image|g\" | xargs rm -rf >/dev/null 2>&1"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
@@ -136,7 +148,7 @@ setImageEtcTime hp =
         ( "find "
             <> hp
             <> "/image/etc -mindepth 1 "
-            <> "-execdir sh -c \"touch -d 1970-01-01T01:00:00 '{}' &>/dev/null || :\" \\;"
+            <> "-execdir sh -c \"touch -d 1970-01-01T01:00:00 '{}' >/dev/null 2>&1 || :\" \\;"
         )
     )
     (\e -> let _ = show (e :: IOException) in putStrLn "ETCTime" >> raiseSignal sigTERM)
