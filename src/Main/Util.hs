@@ -147,7 +147,7 @@ relabelSeLinuxPath rootPath contexts bp =
               <> "/lib64 && "
               <> "chroot "
               <> rootPath
-              <> " /usr/bin/setfiles -F -T \"$((\"$(nproc --all)\"/2))\" "
+              <> " /usr/bin/setfiles -F -T \"$(($(nproc --all)/2))\" "
               <> contexts
               <> " / 2>/dev/null || :"
           )

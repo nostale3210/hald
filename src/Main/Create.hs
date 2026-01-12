@@ -133,7 +133,7 @@ syncMinimumState hp =
 syncState :: Config.Config -> IO ()
 syncState conf =
   let syncCmd = "rsync -aRI \"$@\" " <> Config.haldPath conf <> "/image/ >/dev/null 2>&1 || :"
-      xargsSync = "xargs -n1 -P\"$((\"$(nproc --all)\"/2))\" bash -c '" <> syncCmd <> "' _"
+      xargsSync = "xargs -n1 -P\"$(($(nproc --all)/2))\" bash -c '" <> syncCmd <> "' _"
    in catch
         ( callCommand
             ( "touch -d 1970-01-01T01:00:00 "

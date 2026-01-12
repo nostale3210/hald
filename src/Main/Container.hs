@@ -105,7 +105,7 @@ syncImageBatched fp hp =
             <> "! -type d -printf \"%s\\t%p\\n\" | sort -nr | cut -f2- | "
             <> "sed \"s|^\\("
             <> fp
-            <> "\\)|\\1/.|g\" | xargs -n5000 -P\"$((\"$(nproc --all)\"/2))\" "
+            <> "\\)|\\1/.|g\" | xargs -n5000 -P\"$(($(nproc --all)/2))\" "
             <> "bash -c 'rsync -aHlcx --delete --relative --ignore-missing-args \"$@\" "
             <> hp
             <> "/image/ >/dev/null 2>&1' _ >/dev/null 2>&1"
