@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -oue pipefail
 
+case $1 in
+    dep)
+        :
+        ;;
+    *)
+        printf "This script should only be used instead of hald dep!\n"
+        exit 1
+        ;;
+esac
+
 INITPREFIX="${INITPREFIX:-init}"
 ALDPATH="${ALDPATH:-/.ald}"
 BOOTPATH="${BOOTPATH:-/boot}"
