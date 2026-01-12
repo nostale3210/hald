@@ -19,5 +19,8 @@ copy_exec /usr/bin/rm /usr/bin
 copy_exec /usr/bin/umount /usr/bin
 copy_exec /usr/bin/sleep /usr/bin
 copy_exec /usr/bin/tr /usr/bin
+copy_exec /usr/bin/sed /usr/bin
+
+copy_exec /etc/crypttab /etc
 
 manual_add_modules overlay

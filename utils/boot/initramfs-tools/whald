@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -oue pipefail
+
+INITPREFIX="${INITPREFIX:-init}"
+ALDPATH="${ALDPATH:-/.ald}"
+BOOTPATH="${BOOTPATH:-/boot}"
+
+hald "$@"
+
+deployment="$(find "${BOOTPATH:?}" -maxdepth 1 -mindepth 1 -type d -name "[0-9]*" | rev | cut -d"/" -f1 | rev | sort -nr | head -n1)"
+kver="$(ls "${ALDPATH:?}/${deployment:?}/usr/lib/modules")"
+
+mount -o bind "${ALDPATH:?}/${deployment:?}/usr/lib/modules" /usr/lib/modules
+
+rm -f "${BOOTPATH:?}/${deployment:?}/initramfs.img" || \
+    { rm -rf "${BOOTPATH:?}/${deployment:?}" ; exit 1 ; }
+mv -f "${BOOTPATH:?}/${deployment:?}/vmlinuz" "${BOOTPATH:?}/vmlinuz-$kver" || \
+    { rm -rf "${BOOTPATH:?}/${deployment:?}"  "${BOOTPATH:?}/vmlinuz"* ; exit 1 ; }
+
+update-initramfs -c -k all || \
+    { rm -rf "${BOOTPATH:?}/${deployment:?}" "${BOOTPATH:?}/vmlinuz"* ; exit 1 ; }
+
+mv -f "${BOOTPATH:?}/vmlinuz"* "${BOOTPATH:?}/${deployment:?}/vmlinuz" || \
+    { rm -rf "${BOOTPATH:?}/${deployment:?}" "${BOOTPATH:?}/vmlinuz"* "${BOOTPATH:?}/$INITPREFIX"* ; exit 1 ; }
+mv -f "${BOOTPATH:?}/$INITPREFIX"* "${BOOTPATH:?}/${deployment:?}/initramfs.img" || \
+    { rm -rf "${BOOTPATH:?}/${deployment:?}" "${BOOTPATH:?}/vmlinuz"* "${BOOTPATH:?}/$INITPREFIX"* ; exit 1 ; }
+
+umount -f /usr/lib/modules
