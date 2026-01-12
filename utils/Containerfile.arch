@@ -1,0 +1,51 @@
+FROM docker.io/library/archlinux:latest
+
+RUN pacman-key --init
+RUN pacman -Syyu --noconfirm
+
+RUN pacman -S --noconfirm mkinitcpio
+RUN mkdir -p /etc/pacman.d/hooks && \
+    ln -sf /dev/null /etc/pacman.d/hooks/90-mkinitcpio-install.hook && \
+    ln -sf /dev/null /etc/pacman.d/hooks/60-mkinitcpio-remove.hook
+
+RUN pacman -S --noconfirm base linux dracut
+RUN pacman -S --noconfirm linux-firmware sof-firmware
+RUN pacman -S --noconfirm networkmanager nm-connection-editor && \
+    systemctl enable NetworkManager.service
+RUN pacman -S --noconfirm bash pipewire bluez amd-ucode intel-ucode
+RUN pacman -S --noconfirm neovim man-db e2fsprogs tpm2-tools rpcbind
+RUN pacman -S --noconfirm podman skopeo rsync sudo
+RUN pacman -S --noconfirm git base-devel
+
+RUN mkdir -p /tmp/yay && \
+    useradd -mG wheel aur && passwd -d aur && \
+    chown -R aur:aur /tmp/yay && echo "aur ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    cd /tmp/yay && sudo -u aur git clone https://aur.archlinux.org/yay-bin.git && \
+    cd yay-bin && sudo -u aur makepkg -si --noconfirm
+
+RUN pacman -S --noconfirm xdg-desktop-portal-gnome xdg-desktop-portal-gtk
+RUN pacman -S --noconfirm gnome-keyring libsecret power-profiles-daemon
+RUN pacman -S --noconfirm niri xwayland-satellite xorg-xwayland
+RUN sudo -u aur yay -S --noconfirm dms-shell-bin matugen && \
+        wl-clipboard cliphist cava qt6-multimedia-ffmpeg qt6ct
+RUN sudo -u aur yay -S --noconfirm greetd-dms-greeter-git dgop dsearch-bin
+
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/hald /usr/bin/hald
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/move-mount /usr/bin/move-mount
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/90ald /usr/lib/dracut/modules.d/90ald
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/ald-boot.service /usr/lib/systemd/system/ald-boot.service
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/ald-boot.sh /usr/libexec/ald-boot.sh
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/tools/librarizer .
+
+RUN chmod +x /usr/libexec/ald-boot.sh
+
+RUN bash librarizer && \
+    sed -i "/# Dependencies/r drc_libs" /usr/lib/dracut/modules.d/90ald/module-setup.sh && \
+    rm -f librarizer drc_libs
+
+RUN chmod 4755 /usr/bin/newgidmap && \
+    chmod 4755 /usr/bin/newuidmap
+
+RUN KVER="$(ls /usr/lib/modules)" && \
+    dracut --no-hostonly --kver "$KVER" --reproducible -v \
+    --add "ald tpm2-tss systemd-pcrphase plymouth" -f "/usr/lib/modules/$KVER/initramfs.img"

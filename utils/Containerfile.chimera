@@ -1,0 +1,41 @@
+FROM docker.io/chimeralinux/chimera:latest
+
+RUN apk update && apk upgrade --interactive=no --available
+
+RUN apk add --interactive=no !initramfs-tools
+RUN apk add --interactive=no base-live base-full linux-stable
+
+RUN apk add --interactive=no bash networkmanager podman skopeo rsync neovim
+RUN apk add --interactive=no ucode-intel ucode-amd
+
+RUN echo "AMD64UCODE_INITRAMFS=yes" >> /etc/default/ucode-amd
+RUN echo "IUCODE_TOOL_INITRAMFS=yes" >> /etc/default/ucode-intel
+RUN echo "IUCODE_TOOL_SCANCPUS=no" >> /etc/default/ucode-intel
+
+RUN rm -rf /usr/share/initramfs-tools
+RUN apk del --interactive=no initramfs-tools
+
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/hald /usr/bin/hald
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/move-mount /usr/bin/move-mount
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/initramfs-tools/hook /usr/share/initramfs-tools/hooks/hald
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/initramfs-tools/init-bottom-script /usr/share/initramfs-tools/scripts/init-bottom/hald
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/initramfs-tools/whald /usr/bin/whald
+
+RUN chmod +x /usr/share/initramfs-tools/hooks/hald
+RUN chmod +x /usr/share/initramfs-tools/scripts/init-bottom/hald
+RUN chmod +x /usr/bin/whald
+
+RUN apk add --interactive=no mesa dbus pipewire bluez ufw chrony
+RUN apk add --interactive=no xdg-desktop-portal-gnome xdg-desktop-portal-gtk
+RUN apk add --interactive=no gnome-keyring qt6ct power-profiles-daemon
+
+RUN apk add --interactive=no chimera-repo-user
+RUN apk add --interactive=no niri xwayland xwayland-satellite greetd tuigreet
+RUN apk add --interactive=no cliphist nautilus gnome-disk-utility gvfs gvfs-afc \
+    gvfs-afp gvfs-cdda gvfs-gphoto2 gvfs-mtp gvfs-smb
+
+RUN apk add --interactive=no kitty wl-mirror flatpak
+
+RUN KVER="$(ls /usr/lib/modules)" && \
+    mv -f /boot/vmlinuz* /usr/lib/modules/"$KVER"/vmlinuz && \
+    mv -f /boot/init* /usr/lib/modules/"$KVER"/initramfs.img
