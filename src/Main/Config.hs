@@ -7,6 +7,7 @@ data Config
   = Config
   { haldPath :: FilePath,
     bootPath :: FilePath,
+    ukiPath :: FilePath,
     configPath :: FilePath,
     containerImage :: String,
     containerTag :: String,
@@ -22,6 +23,7 @@ defaultConfig =
   Config
     { haldPath = "/.ald",
       bootPath = "/boot",
+      ukiPath = bootPath defaultConfig <> "/EFI/Linux",
       configPath = "/etc/hald",
       containerImage = "ghcr.io/nostale3210/timesinkc-main-hald",
       containerTag = "latest",
@@ -66,6 +68,7 @@ updateSingleKey conf key val =
   case key of
     "haldPath" -> conf {haldPath = val}
     "bootPath" -> conf {bootPath = val}
+    "ukiPath" -> conf {ukiPath = val}
     "configPath" -> conf {configPath = val}
     "containerImage" ->
       applyConfigKey

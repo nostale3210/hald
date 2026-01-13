@@ -1,6 +1,5 @@
 module Main.Fail where
 
-import Control.Concurrent qualified as Conc
 import Control.Exception (catch)
 import Control.Monad (unless)
 import Data.Maybe qualified

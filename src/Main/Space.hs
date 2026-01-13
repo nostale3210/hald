@@ -18,7 +18,8 @@ rmDep deployment conf = do
           then
             Dep.BootComponents
               { Dep.bootDir = Just (Config.bootPath conf <> "/" <> show depId),
-                Dep.bootEntry = Dep.bootEntry bootComponents
+                Dep.bootEntry = Dep.bootEntry bootComponents,
+                Dep.ukiPath = Dep.ukiPath bootComponents
               }
           else
             bootComponents
@@ -35,12 +36,7 @@ rmDep deployment conf = do
       Util.printInfo ("Can't remove currently used deployment " <> show (Dep.identifier tbRmDep) <> "!") (Config.interactive conf)
   where
     depId = Dep.identifier deployment
-    tbRmDep' =
-      Dep.getDeployment
-        depId
-        (Config.rootDir conf)
-        (Config.haldPath conf)
-        (Config.bootPath conf)
+    tbRmDep' = Dep.getDeployment depId conf
 
 rmComponent :: Int -> String -> Maybe FilePath -> IO ()
 rmComponent ident component path =
@@ -64,11 +60,7 @@ rmDeps keepDeps deployments conf
         [] -> return ()
         x : xs -> do
           tbRmDep <-
-            Dep.getDeployment
-              x
-              (Config.rootDir conf)
-              (Config.haldPath conf)
-              (Config.bootPath conf)
+            Dep.getDeployment x conf
           rmDep tbRmDep conf
           rmDeps keepDeps xs conf
   | otherwise = return ()
@@ -83,16 +75,17 @@ gcBroken depIds conf =
 
 checkDep :: Int -> Config.Config -> IO ()
 checkDep depId conf = do
-  dep <- Dep.getDeployment depId (Config.rootDir conf) (Config.haldPath conf) (Config.bootPath conf)
+  dep <- Dep.getDeployment depId conf
   let bootComps = Dep.bootComponents dep
   rootDirExists <- componentPresent $ Dep.rootDir dep
   bootDirExists <- componentPresent $ Dep.bootDir bootComps
   bootEntryExists <- componentPresent $ Dep.bootEntry bootComps
+  ukiExists <- componentPresent $ Dep.ukiPath bootComps
   lockfileExists <- componentPresent $ Dep.lockfile dep
   idFileExists <- Util.pathExists $ Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep"
   if rootDirExists
-    && bootDirExists
-    && bootEntryExists
+    && (bootDirExists || ukiExists)
+    && (bootEntryExists || ukiExists)
     && lockfileExists
     && idFileExists
     then do

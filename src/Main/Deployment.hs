@@ -2,6 +2,7 @@ module Main.Deployment where
 
 import Control.Exception (IOException, catch)
 import Data.Set qualified as Set
+import Main.Config qualified as Config
 import Main.Util qualified as Util
 import System.Directory (doesDirectoryExist)
 import System.FilePath.Glob
@@ -22,18 +23,19 @@ instance Ord Deployment where
 data BootComponents
   = BootComponents
   { bootDir :: Maybe FilePath,
-    bootEntry :: Maybe FilePath
+    bootEntry :: Maybe FilePath,
+    ukiPath :: Maybe FilePath
   }
   deriving (Show, Eq)
 
-createDeployment :: [Int] -> FilePath -> FilePath -> Deployment
-createDeployment exDeps hp bp =
+createDeployment :: [Int] -> Config.Config -> Deployment
+createDeployment exDeps conf =
   let depId = Util.newIdentifier exDeps
    in Deployment
         { identifier = depId,
-          lockfile = Just (hp <> "/." <> show depId),
-          rootDir = Just (hp <> "/" <> show depId),
-          bootComponents = createBootPaths depId bp
+          lockfile = Just (Config.haldPath conf <> "/." <> show depId),
+          rootDir = Just (Config.haldPath conf <> "/" <> show depId),
+          bootComponents = createBootPaths depId conf
         }
 
 dummyDeployment :: Deployment
@@ -45,21 +47,24 @@ dummyDeployment =
       bootComponents =
         BootComponents
           { bootDir = Nothing,
-            bootEntry = Nothing
+            bootEntry = Nothing,
+            ukiPath = Nothing
           }
     }
 
-createBootPaths :: Int -> FilePath -> BootComponents
-createBootPaths depId bp =
+createBootPaths :: Int -> Config.Config -> BootComponents
+createBootPaths depId conf =
   BootComponents
-    { bootDir = Just (bp <> "/" <> show depId),
-      bootEntry = Just (bp <> "/loader/entries/" <> show depId <> ".conf")
+    { bootDir = Just (Config.bootPath conf <> "/" <> show depId),
+      bootEntry = Just (Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf"),
+      ukiPath = Just (Config.ukiPath conf <> "/" <> show depId <> ".efi")
     }
 
-getBootComponents :: Int -> FilePath -> IO BootComponents
-getBootComponents depId bp = do
-  let bPath = bp <> "/" <> show depId
-      bEntry = bp <> "/loader/entries/" <> show depId <> ".conf"
+getBootComponents :: Int -> Config.Config -> IO BootComponents
+getBootComponents depId conf = do
+  let bPath = Config.bootPath conf <> "/" <> show depId
+      bEntry = Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf"
+      uki = Config.ukiPath conf <> "/" <> show depId <> ".efi"
   bPathExists <- Util.pathExists bPath
   bPathIsDir <-
     if bPathExists
@@ -70,6 +75,7 @@ getBootComponents depId bp = do
   kernelExists <- Util.pathExists (bPath <> "/vmlinuz")
   initrdExists <- Util.pathExists (bPath <> "/initramfs.img")
   bEntryExists <- Util.pathExists bEntry
+  ukiExists <- Util.pathExists uki
   return
     BootComponents
       { bootDir =
@@ -82,14 +88,18 @@ getBootComponents depId bp = do
         bootEntry =
           if bEntryExists
             then Just bEntry
+            else Nothing,
+        ukiPath =
+          if ukiExists
+            then Just uki
             else Nothing
       }
 
-getDeployment :: Int -> FilePath -> FilePath -> FilePath -> IO Deployment
-getDeployment depId root hp bp = do
-  currentDepId <- getCurrentDeploymentId root
-  let lFile = hp <> "/." <> show depId
-      rDir = if depId == currentDepId then "/usr" else hp <> "/" <> show depId
+getDeployment :: Int -> Config.Config -> IO Deployment
+getDeployment depId conf = do
+  currentDepId <- getCurrentDeploymentId $ Config.rootDir conf
+  let lFile = Config.haldPath conf <> "/." <> show depId
+      rDir = if depId == currentDepId then "/usr" else Config.haldPath conf <> "/" <> show depId
   lFileExists <- Util.pathExists lFile
   rDirExists <- Util.pathExists rDir
   rDirIsDir <-
@@ -97,7 +107,7 @@ getDeployment depId root hp bp = do
       then do
         doesDirectoryExist rDir
       else return False
-  bComponents <- getBootComponents depId bp
+  bComponents <- getBootComponents depId conf
   return
     Deployment
       { identifier = depId,

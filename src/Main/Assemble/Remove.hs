@@ -19,7 +19,7 @@ deploymentErasureAssemblyPre depId conf inhibit =
 
 deploymentErasureAssembly :: Int -> Config.Config -> Util.MessageContainer -> IO ()
 deploymentErasureAssembly depId conf msgCont = do
-  tbRmDep <- Dep.getDeployment depId (Config.rootDir conf) (Config.haldPath conf) (Config.bootPath conf)
+  tbRmDep <- Dep.getDeployment depId conf
   Fail.installGenericHandler [sigINT, sigTERM] conf (Just tbRmDep)
 
   Util.printInfo

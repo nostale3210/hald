@@ -14,6 +14,7 @@ createSkeleton :: Int -> Config.Config -> IO ()
 createSkeleton depId conf =
   Util.ensureDirExists (Config.haldPath conf <> "/" <> show depId)
     >> Util.ensureDirExists (Config.bootPath conf <> "/" <> show depId)
+    >> Util.ensureDirExists (Config.ukiPath conf)
 
 createBootEntry :: Int -> Config.Config -> IO ()
 createBootEntry depId conf = do
@@ -230,21 +231,60 @@ hardlinkDep deployment hp = do
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
 
-placeBootFiles :: Dep.Deployment -> FilePath -> IO ()
-placeBootFiles deployment hp = do
-  kernel <- modulePathSearch "vmlinuz"
-  initrd <- modulePathSearch "initramfs.img"
+modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
+modulePathSearch conf deployment target =
+  Util.recursiveFileSearch
+    ( Config.haldPath conf
+        <> "/"
+        <> show (Dep.identifier deployment)
+        <> "/usr/lib/modules"
+    )
+    target
+    >>= \path -> return $ head path
+
+placeBootFiles :: Config.Config -> Dep.Deployment -> IO ()
+placeBootFiles conf deployment = do
+  kernel <- modulePathSearch conf deployment "vmlinuz"
+  initrd <- modulePathSearch conf deployment "initramfs.img"
   let bootComps = Dep.bootComponents deployment
   case Dep.bootDir bootComps of
     Just x -> do
-      copyFile (head kernel) (x <> "/vmlinuz")
-      copyFile (head initrd) (x <> "/initramfs.img")
+      copyFile kernel (x <> "/vmlinuz")
+      copyFile initrd (x <> "/initramfs.img")
     Nothing -> raiseSignal sigTERM
-  where
-    modulePathSearch =
-      Util.recursiveFileSearch
-        ( hp
-            <> "/"
-            <> show (Dep.identifier deployment)
-            <> "/usr/lib/modules"
+
+installUki :: Config.Config -> Dep.Deployment -> IO ()
+installUki conf deployment = do
+  kernel <- modulePathSearch conf deployment "vmlinuz"
+  initrd <- modulePathSearch conf deployment "initramfs.img"
+  templCmdline <-
+    catch
+      ( readFile $
+          Config.configPath conf <> "/cmdline"
+      )
+      ( \e ->
+          let err = show (e :: IOException)
+           in putStrLn err
+                >> raiseSignal sigTERM
+                >> return ""
+      )
+  let cmdline = Util.replaceString "INSERT_DEPLOYMENT" (show $ Dep.identifier deployment) templCmdline
+  Util.printInfo ("UKI cmdline: " <> cmdline) (Config.interactive conf)
+  let bootComps = Dep.bootComponents deployment
+  case Dep.ukiPath bootComps of
+    Just x ->
+      catch
+        ( callCommand
+            ( "ukify build --linux="
+                <> kernel
+                <> " --initrd="
+                <> initrd
+                <> " --cmdline='"
+                <> cmdline
+                <> "' --output="
+                <> x
+            )
         )
+        ( \e -> let _ = show (e :: IOException) in raiseSignal sigTERM
+        )
+    Nothing -> raiseSignal sigTERM

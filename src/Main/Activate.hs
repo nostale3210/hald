@@ -5,7 +5,6 @@ import Control.Monad (when)
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Util qualified as Util
-import System.Directory
 import System.Posix.Signals (addSignal, blockSignals, emptySignalSet, raiseSignal, sigINT, sigTERM, unblockSignals)
 import System.Process (callCommand)
 
@@ -25,8 +24,8 @@ delegateMount fromPath toPath =
               >> raiseSignal sigTERM
     )
 
-moveOMount :: FilePath -> FilePath -> FilePath -> IO ()
-moveOMount hp fromPath toPath =
+moveOMount :: FilePath -> FilePath -> IO ()
+moveOMount fromPath toPath =
   catch
     ( callCommand
         ( "move-mount -mb "
@@ -103,7 +102,7 @@ activateNewRoot root hp newDep = do
       then
         privateMount (root <> "/usr")
           >> usrOverlayMount hp (newRoot <> "/usr") (newRoot <> "/usr")
-          >> moveOMount hp (newRoot <> "/usr") (root <> "/usr")
+          >> moveOMount (newRoot <> "/usr") (root <> "/usr")
           >> Lock.umountDirForcibly Lock.Fl (root <> "/usr")
       else usrOverlayMount hp (newRoot <> "/usr") (root <> "/usr")
     if etcMounted

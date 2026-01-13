@@ -16,7 +16,8 @@ data Command
         activateFlag :: Bool,
         gcFlag :: Bool,
         stateFlag :: Bool,
-        secureBoot :: Bool
+        secureBoot :: Bool,
+        uki :: Bool
       }
   | Activate Int
   | Status
@@ -105,8 +106,15 @@ depOptions =
       False
       True
       ( long "sb"
-        <> short 's'
-        <> help "Sign the deployment's kernel with sbctl"
+          <> short 's'
+          <> help "Sign the deployment's kernel with sbctl"
+      )
+    <*> flag
+      False
+      True
+      ( long "uki"
+          <> short 'k'
+          <> help "Build UKI using ukify"
       )
 
 rmCommand :: Mod CommandFields Command

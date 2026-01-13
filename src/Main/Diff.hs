@@ -53,17 +53,12 @@ printDiff from to cmd conf = do
 
 getRpmStatus :: Int -> Config.Config -> IO String
 getRpmStatus dep conf =
-  Dep.getDeployment
-    dep
-    (Config.rootDir conf)
-    (Config.haldPath conf)
-    (Config.bootPath conf)
-    >>= \fullDep ->
-      let root =
-            if Dep.rootDir fullDep == Just "/usr"
-              then "/"
-              else Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
-       in (return $ "rpm -qa --root=" <> root)
+  Dep.getDeployment dep conf >>= \fullDep ->
+    let root =
+          if Dep.rootDir fullDep == Just "/usr"
+            then "/"
+            else Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
+     in (return $ "rpm -qa --root=" <> root)
 
 diffStati :: String -> String -> IO ()
 diffStati from to =

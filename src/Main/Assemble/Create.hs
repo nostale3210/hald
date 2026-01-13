@@ -13,13 +13,13 @@ import Main.Space qualified as Space
 import Main.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> IO ()
-deploymentCreationAssemblyPre act build keep gc up se conf inhibit sb = do
+deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> Bool -> IO ()
+deploymentCreationAssemblyPre act build keep gc up se conf inhibit sb uki = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
-  deploymentCreationAssembly act build keep gc up se conf msgCont sb
+  deploymentCreationAssembly act build keep gc up se conf msgCont sb uki
 
-deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> Bool -> IO ()
-deploymentCreationAssembly act build keep gc up se conf msgCont sb = do
+deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> Bool -> Bool -> IO ()
+deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
   updated <-
     if up
       then do
@@ -28,7 +28,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb = do
       else return True
 
   existingDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
-  let newDep = Dep.createDeployment existingDeps (Config.haldPath conf) (Config.bootPath conf)
+  let newDep = Dep.createDeployment existingDeps conf
 
   Fail.installGenericHandler [sigINT, sigTERM] conf (Just newDep)
 
@@ -63,8 +63,11 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb = do
     Container.rmContainer "ald-root"
 
     Util.printProgress msgCont "Placing kernel and initramfs..."
-    Create.placeBootFiles newDep (Config.haldPath pbConf)
-    Create.createBootEntry (Dep.identifier newDep) pbConf
+    if uki
+      then Create.installUki conf newDep
+      else
+        Create.placeBootFiles conf newDep
+          >> Create.createBootEntry (Dep.identifier newDep) pbConf
 
     when se $ do
       Util.printProgress msgCont ("Relabeling deployment " <> show (Dep.identifier newDep) <> "...")
@@ -75,8 +78,13 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb = do
 
     when sb $ do
       Util.printProgress msgCont ("Signing deployment " <> show (Dep.identifier newDep) <> " kernel...")
-      Util.signKernel (Config.bootPath pbConf) (Dep.identifier newDep) >>= \signingSuccess ->
-        unless signingSuccess (Util.printInfo "Signing kernel failed!" (Config.interactive pbConf))
+      signingSuccess <-
+        if uki
+          then
+            Util.signKernel (Config.ukiPath pbConf) (Dep.identifier newDep) ".efi"
+          else
+            Util.signKernel (Config.bootPath pbConf) (Dep.identifier newDep) "/vmlinuz"
+      unless signingSuccess (Util.printInfo "Signing kernel failed!" (Config.interactive pbConf))
 
     when act $ Asac.deploymentActivationAssembly (Dep.identifier newDep) pbConf msgCont
 

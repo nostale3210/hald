@@ -66,15 +66,10 @@ printDepStati conf = do
   depList <-
     mapM
       ( \dep ->
-          Dep.getDeployment
-            dep
-            (Config.rootDir conf)
-            (Config.haldPath conf)
-            (Config.bootPath conf)
-            >>= \fullDep ->
-              getDepStatus
-                conf
-                fullDep
+          Dep.getDeployment dep conf >>= \fullDep ->
+            getDepStatus
+              conf
+              fullDep
       )
       sortedDeps
   putStrLn "Currently retained deployments:"

@@ -179,9 +179,9 @@ acquireLock fp = do
       _ <- lockFile fp Exclusive
       return True
 
-signKernel :: FilePath -> Int -> IO Bool
-signKernel bp dep =
-  let kernelPath = bp <> "/" <> show dep <> "/vmlinuz"
+signKernel :: FilePath -> Int -> FilePath -> IO Bool
+signKernel bp dep target =
+  let kernelPath = bp <> "/" <> show dep <> target
    in pathExists kernelPath >>= \kernelExists ->
         ( if kernelExists
             then

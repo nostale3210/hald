@@ -22,11 +22,7 @@ deploymentActivationAssembly newDepId conf msgCont = do
   haldMounted <- Util.isMountpoint (Config.haldPath conf)
 
   newDep <-
-    Dep.getDeployment
-      newDepId
-      (Config.rootDir conf)
-      (Config.haldPath conf)
-      (Config.bootPath conf)
+    Dep.getDeployment newDepId conf
   unless
     haldMounted
     (Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf)
