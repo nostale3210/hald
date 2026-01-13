@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -oue pipefail
 
+# -k should never be used with whald
+if [[ "$1" == "--uki" ]]; then
+    BUILD_UKI="y"
+    shift
+fi
+
 case $1 in
     dep)
         :
@@ -14,6 +20,7 @@ esac
 INITPREFIX="${INITPREFIX:-init}"
 ALDPATH="${ALDPATH:-/.ald}"
 BOOTPATH="${BOOTPATH:-/boot}"
+UKIPATH="${UKIPATH:-/boot/EFI/Linux}"
 
 hald "$@"
 
@@ -36,3 +43,12 @@ mv -f "${BOOTPATH:?}/$INITPREFIX"* "${BOOTPATH:?}/${deployment:?}/initramfs.img"
     { rm -rf "${BOOTPATH:?}/${deployment:?}" "${BOOTPATH:?}/vmlinuz"* "${BOOTPATH:?}/$INITPREFIX"* ; exit 1 ; }
 
 umount -f /usr/lib/modules
+
+if [[ "$BUILD_UKI" == "y" ]]; then
+    CMDLINE="$(cat /etc/hald/cmdline | sed "s/INSERT_DEPLOYMENT/$deployment/" | tr -d "\n")"
+    printf "UKI cmdline: %s\n" "$CMDLINE"
+    ukify build --linux="${BOOTPATH:?}/${deployment:?}/vmlinuz" \
+        --initrd="${BOOTPATH:?}/${deployment:?}/initramfs.img" \
+        --cmdline="$CMDLINE" \
+        --output="${UKIPATH:?}/${deployment:?}.efi"
+fi
