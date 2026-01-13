@@ -32,10 +32,7 @@ genericTerminationHandler conf pid dep = CatchInfoOnce $ \signalInfo -> do
         let _ = show (e :: IOException)
          in putStr ""
     )
-  deployments <-
-    Dep.getDeploymentsInt
-      (Config.haldPath conf)
-      (Config.bootPath conf)
+  deployments <- Dep.getDeploymentsInt conf
   Space.gcBroken deployments conf
   failAndCleanup pending conf
   signalProcess (siginfoSignal signalInfo) pid

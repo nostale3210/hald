@@ -116,21 +116,23 @@ getDeployment depId conf = do
         bootComponents = bComponents
       }
 
-getDeployments :: FilePath -> FilePath -> IO [FilePath]
-getDeployments hp bp = do
-  lockfiles <- globDir1 (compile ".[0-9]*") hp
-  rootDirs <- globDir1 (compile "[0-9]*") hp
-  bootDirs <- globDir1 (compile "[0-9]*") bp
-  bootEntrys <- globDir1 (compile "[0-9]*.conf") (bp <> "/loader/entries")
-  let lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (hp <> "/")) lockfiles
-      rootSet = Set.fromList $ map (Util.removeString (hp <> "/")) rootDirs
-      bootDSet = Set.fromList $ map (Util.removeString (bp <> "/")) bootDirs
-      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (bp <> "/loader/entries/")) bootEntrys
-  return $ Set.toList $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
+getDeployments :: Config.Config -> IO [FilePath]
+getDeployments conf = do
+  lockfiles <- globDir1 (compile ".[0-9]*") (Config.haldPath conf)
+  rootDirs <- globDir1 (compile "[0-9]*") (Config.haldPath conf)
+  bootDirs <- globDir1 (compile "[0-9]*") (Config.bootPath conf)
+  bootEntrys <- globDir1 (compile "[0-9]*.conf") (Config.bootPath conf <> "/loader/entries")
+  ukis <- globDir1 (compile ".[0-9]*") (Config.ukiPath conf)
+  let lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (Config.haldPath conf <> "/")) lockfiles
+      rootSet = Set.fromList $ map (Util.removeString (Config.haldPath conf <> "/")) rootDirs
+      bootDSet = Set.fromList $ map (Util.removeString (Config.bootPath conf <> "/")) bootDirs
+      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (Config.bootPath conf <> "/loader/entries/")) bootEntrys
+      ukiSet = Set.fromList $ map (Util.removeString ".efi" . Util.removeString (Config.ukiPath conf)) ukis
+  return $ Set.toList $ Set.union ukiSet $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
 
-getDeploymentsInt :: FilePath -> FilePath -> IO [Int]
-getDeploymentsInt hp bp =
-  getDeployments hp bp >>= \deployments ->
+getDeploymentsInt :: Config.Config -> IO [Int]
+getDeploymentsInt conf =
+  getDeployments conf >>= \deployments ->
     let intdeps = map (\d -> read d :: Int) deployments
      in return intdeps
 

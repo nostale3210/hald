@@ -27,7 +27,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
         Container.pullImage (Config.containerUri conf)
       else return True
 
-  existingDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
+  existingDeps <- Dep.getDeploymentsInt conf
   let newDep = Dep.createDeployment existingDeps conf
 
   Fail.installGenericHandler [sigINT, sigTERM] conf (Just newDep)
@@ -64,9 +64,9 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
 
     Util.printProgress msgCont "Placing kernel and initramfs..."
     if uki
-      then Create.installUki conf newDep
+      then Create.installUki pbConf newDep
       else
-        Create.placeBootFiles conf newDep
+        Create.placeBootFiles pbConf newDep
           >> Create.createBootEntry (Dep.identifier newDep) pbConf
 
     when se $ do

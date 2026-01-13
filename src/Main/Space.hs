@@ -47,7 +47,7 @@ rmComponent ident conf component path =
         (removePathForcibly p)
         ( \e ->
             let err = show (e :: IOException)
-             in Util.printInfo ("Couldn't remove " <> show ident <> " " <> component <> "; " <> err) False
+             in Util.printInfo ("Couldn't remove " <> show ident <> " " <> component <> "; " <> err) (Config.interactive conf)
         )
     Nothing ->
       Util.printInfo

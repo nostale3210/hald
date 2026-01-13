@@ -18,9 +18,9 @@ deploymentGcAssembly :: Config.Config -> Util.MessageContainer -> IO ()
 deploymentGcAssembly conf msgCont = do
   Util.printProgress msgCont "Performing garbage collection..."
 
-  allDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
+  allDeps <- Dep.getDeploymentsInt conf
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
   Space.gcBroken allDeps conf
-  newAllDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
+  newAllDeps <- Dep.getDeploymentsInt conf
   Space.rmDeps (Config.keepDeps conf) newAllDeps conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

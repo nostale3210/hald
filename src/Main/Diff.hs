@@ -21,7 +21,7 @@ selectDeployment allDeps selected =
 selectDeps :: Int -> Int -> Config.Config -> IO (Int, Int)
 selectDeps comp compTo conf
   | comp == 0 && compTo == 0 = do
-      compDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
+      compDeps <- Dep.getDeploymentsInt conf
       toDep <- Dep.getCurrentDeploymentId $ Config.rootDir conf
       let fromDep = selectDeployment compDeps [toDep]
       return (if fromDep < toDep then (fromDep, toDep) else (toDep, fromDep))
@@ -33,7 +33,7 @@ selectDeps comp compTo conf
 
 printDiff :: Int -> Int -> String -> Config.Config -> IO ()
 printDiff from to cmd conf = do
-  allDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
+  allDeps <- Dep.getDeploymentsInt conf
   let fromExisting =
         if from `elem` allDeps || from == 0
           then from

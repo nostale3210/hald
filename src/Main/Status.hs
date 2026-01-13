@@ -61,7 +61,7 @@ returnKernelVersion fp =
 
 printDepStati :: Config.Config -> IO ()
 printDepStati conf = do
-  allDeps <- Dep.getDeploymentsInt (Config.haldPath conf) (Config.bootPath conf)
+  allDeps <- Dep.getDeploymentsInt conf
   let sortedDeps = sort allDeps
   depList <-
     mapM
