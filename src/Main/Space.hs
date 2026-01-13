@@ -26,10 +26,11 @@ rmDep deployment conf = do
   if Dep.rootDir tbRmDep /= Just "/usr"
     then
       mapM_
-        (uncurry (rmComponent depId))
+        (uncurry (rmComponent depId conf))
         [ ("root dir", Dep.rootDir tbRmDep),
           ("boot dir", Dep.bootDir tbRmBootComponents),
           ("boot entry", Dep.bootEntry tbRmBootComponents),
+          ("uki", Dep.ukiPath tbRmBootComponents),
           ("lockfile", Dep.lockfile tbRmDep)
         ]
     else
@@ -38,8 +39,8 @@ rmDep deployment conf = do
     depId = Dep.identifier deployment
     tbRmDep' = Dep.getDeployment depId conf
 
-rmComponent :: Int -> String -> Maybe FilePath -> IO ()
-rmComponent ident component path =
+rmComponent :: Int -> Config.Config -> String -> Maybe FilePath -> IO ()
+rmComponent ident conf component path =
   case path of
     Just p ->
       catch
@@ -51,7 +52,7 @@ rmComponent ident component path =
     Nothing ->
       Util.printInfo
         ("Deployment " <> show ident <> ": No associated " <> component <> ".")
-        False
+        (Config.interactive conf)
 
 rmDeps :: Int -> [Int] -> Config.Config -> IO ()
 rmDeps keepDeps deployments conf

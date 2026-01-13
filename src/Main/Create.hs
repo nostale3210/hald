@@ -268,7 +268,12 @@ installUki conf deployment = do
                 >> raiseSignal sigTERM
                 >> return ""
       )
-  let cmdline = Util.replaceString "INSERT_DEPLOYMENT" (show $ Dep.identifier deployment) templCmdline
+  let cmdline =
+        Util.removeString "\n" $
+          Util.replaceString
+            "INSERT_DEPLOYMENT"
+            (show $ Dep.identifier deployment)
+            templCmdline
   Util.printInfo ("UKI cmdline: " <> cmdline) (Config.interactive conf)
   let bootComps = Dep.bootComponents deployment
   case Dep.ukiPath bootComps of
@@ -283,6 +288,7 @@ installUki conf deployment = do
                 <> cmdline
                 <> "' --output="
                 <> x
+                <> " >/dev/null 2>&1"
             )
         )
         ( \e -> let _ = show (e :: IOException) in raiseSignal sigTERM
