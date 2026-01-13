@@ -1,0 +1,28 @@
+FROM ghcr.io/void-linux/void-musl-full:latest
+
+RUN xbps-install -Syu
+
+RUN xbps-install -y base-system linux dracut dracut-uefi runit runit-void systemd-boot
+RUN xbps-install -y shadow bash util-linux coreutils e2fsprogs lvm2 cryptsetup
+RUN xbps-install -y pipewire bluez dbus dmidecode NetworkManager dmraid xmirror
+RUN xbps-install -y podman skopeo rsync neovim
+
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/hald /usr/bin/hald
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/move-mount /usr/bin/move-mount
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/90ald-systemdless /usr/lib/dracut/modules.d/90ald
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/boot/ald-boot.sh /usr/libexec/ald-boot.sh
+COPY --from=ghcr.io/nostale3210/hald-utils:latest /app/tools/librarizer .
+
+RUN bash librarizer && \
+    sed -i "/# Dependencies/r drc_libs" /usr/lib/dracut/modules.d/90ald/module-setup.sh && \
+    rm -f librarizer drc_libs
+
+RUN chmod +x /usr/libexec/ald-boot.sh
+
+RUN chmod 4755 /usr/bin/newgidmap && \
+    chmod 4755 /usr/bin/newuidmap
+
+RUN KVER="$(ls /usr/lib/modules)" && \
+    mv /boot/*vmlinuz* /usr/lib/modules/$KVER/vmlinuz && \
+    dracut --no-hostonly --kver "$KVER" --reproducible --add "ald" \
+    -f "/usr/lib/modules/$KVER/initramfs.img"
