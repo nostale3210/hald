@@ -88,48 +88,9 @@ relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
 relabelSeLinuxPath rootPath contexts bp =
   do
     catch
-      (ensureDirExists (rootPath <> bp))
-      ( \e ->
-          let _ = show (e :: IOException)
-           in printInfo "Relabeling boot directory failed." False
-                >> raiseSignal sigTERM
-      )
-    catch
       ( callCommand
-          ( "mount --bind "
+          ( "restorecon -RF "
               <> bp
-              <> " "
-              <> (rootPath <> bp)
-          )
-      )
-      ( \e ->
-          let _ = show (e :: IOException)
-           in printInfo "Relabeling boot directory failed." False
-                >> raiseSignal sigTERM
-      )
-    catch
-      ( callCommand
-          ( "ln -sf usr/lib "
-              <> rootPath
-              <> "/lib && "
-              <> "ln -sf usr/lib64 "
-              <> rootPath
-              <> "/lib64 && "
-              <> "chroot "
-              <> rootPath
-              <> " restorecon -RF "
-              <> bp
-          )
-      )
-      ( \e ->
-          let _ = show (e :: IOException)
-           in printInfo "Relabeling boot directory failed." False
-                >> raiseSignal sigTERM
-      )
-    catch
-      ( callCommand
-          ( "umount -Rfl "
-              <> (rootPath <> bp)
           )
       )
       ( \e ->
