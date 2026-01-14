@@ -51,4 +51,5 @@ if [[ "$BUILD_UKI" == "y" ]]; then
         --initrd="${BOOTPATH:?}/${deployment:?}/initramfs.img" \
         --cmdline="$CMDLINE" \
         --output="${UKIPATH:?}/${deployment:?}.efi"
+    rm -rf "${BOOTPATH:?}/${deployment:?}"
 fi
