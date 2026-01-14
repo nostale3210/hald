@@ -52,4 +52,5 @@ if [[ "$BUILD_UKI" == "y" ]]; then
         --cmdline="$CMDLINE" \
         --output="${UKIPATH:?}/${deployment:?}.efi"
     rm -rf "${BOOTPATH:?}/${deployment:?}"
+    rm -f "${BOOTPATH:?}/loader/entries/${deployment:?}.conf"
 fi
