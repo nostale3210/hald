@@ -56,7 +56,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
 
     Util.printProgress msgCont ("Syncing system config... (Dropping state: " <> show keep <> ")")
     Create.syncSystemConfig keep pbConf
-    Create.createSkeleton (Dep.identifier newDep) pbConf
+    Create.createSkeleton (Dep.identifier newDep) pbConf uki
 
     Util.printProgress msgCont "Creating hardlinks to new deployment..."
     Create.hardlinkDep newDep (Config.haldPath pbConf)

@@ -10,11 +10,12 @@ import System.Directory
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process
 
-createSkeleton :: Int -> Config.Config -> IO ()
-createSkeleton depId conf =
+createSkeleton :: Int -> Config.Config -> Bool -> IO ()
+createSkeleton depId conf uki =
   Util.ensureDirExists (Config.haldPath conf <> "/" <> show depId)
-    >> Util.ensureDirExists (Config.bootPath conf <> "/" <> show depId)
-    >> Util.ensureDirExists (Config.ukiPath conf)
+    >> if uki
+      then Util.ensureDirExists (Config.ukiPath conf)
+      else Util.ensureDirExists (Config.bootPath conf <> "/" <> show depId)
 
 createBootEntry :: Int -> Config.Config -> IO ()
 createBootEntry depId conf = do
