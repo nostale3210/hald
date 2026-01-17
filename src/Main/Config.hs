@@ -3,6 +3,11 @@ module Main.Config where
 import Control.Exception (IOException, catch)
 import Main.Util qualified as Util
 
+data PackageManager
+  = Rpm
+  | Unknown
+  deriving (Show, Eq)
+
 data Config
   = Config
   { haldPath :: FilePath,
@@ -15,7 +20,8 @@ data Config
     localTag :: String,
     keepDeps :: Int,
     rootDir :: FilePath,
-    interactive :: Bool
+    interactive :: Bool,
+    packageManager :: PackageManager
   }
 
 defaultConfig :: Config
@@ -31,7 +37,8 @@ defaultConfig =
       localTag = "localhost/hald-custom",
       keepDeps = 4,
       rootDir = "",
-      interactive = False
+      interactive = False,
+      packageManager = Unknown
     }
 
 getUserConfig :: Config -> IO String
@@ -91,4 +98,11 @@ updateSingleKey conf key val =
     "keepDeps" -> conf {keepDeps = read val :: Int}
     "rootDir" -> conf {rootDir = val}
     "interactive" -> conf {interactive = read val :: Bool}
+    "packageManager" -> conf {packageManager = selectPm val}
     _ -> conf
+
+selectPm :: String -> PackageManager
+selectPm strMgr =
+  case strMgr of
+    "rpm" -> Rpm
+    _ -> Unknown

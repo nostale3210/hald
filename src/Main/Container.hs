@@ -124,7 +124,7 @@ trimImageLeftovers fp hp =
             <> "/image/etc "
             <> "| sed \"s|^"
             <> hp
-            <> "/image||g\" | sort > /tmp/hp && "
+            <> "/image||g\" | sort > /tmp/hald_hp && "
             <> "find "
             <> fp
             <> "/usr "
@@ -132,8 +132,8 @@ trimImageLeftovers fp hp =
             <> "/etc "
             <> "| sed \"s|^"
             <> fp
-            <> "||g\" | sort > /tmp/fp && "
-            <> "comm -23 /tmp/hp /tmp/fp | "
+            <> "||g\" | sort > /tmp/hald_fp && "
+            <> "comm -23 /tmp/hald_hp /tmp/hald_fp | "
             <> "sed \"s|^|"
             <> hp
             <> "/image|g\" | xargs rm -rf >/dev/null 2>&1"

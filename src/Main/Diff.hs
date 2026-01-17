@@ -31,44 +31,57 @@ selectDeps comp compTo conf
   | comp == 0 && compTo /= 0 = selectDeps compTo comp conf
   | otherwise = return (comp, compTo)
 
-printDiff :: Int -> Int -> String -> Config.Config -> IO ()
-printDiff from to cmd conf = do
-  allDeps <- Dep.getDeploymentsInt conf
-  let fromExisting =
-        if from `elem` allDeps || from == 0
-          then from
-          else error "Deployment 1 doesn't exist."
-      toExisting =
-        if to `elem` allDeps || to == 0
-          then to
-          else error "Deployment 2 doesn't exist."
-  compDeps <- selectDeps fromExisting toExisting conf
-  case (compDeps, cmd) of
-    ((x, y), "rpm") -> do
-      xStatus <- getRpmStatus x conf
-      yStatus <- getRpmStatus y conf
-      putStrLn $ "Comparing deployments " <> show x <> " and " <> show y
-      diffStati xStatus yStatus
-    _ -> return ()
+printDiff :: Int -> Int -> Config.Config -> IO ()
+printDiff from to conf =
+  if Config.packageManager conf == Config.Unknown
+    then putStrLn "Unknown package manager, try setting packageManager in hald.conf."
+    else do
+      allDeps <- Dep.getDeploymentsInt conf
+      let fromExisting =
+            if from `elem` allDeps || from == 0
+              then from
+              else error "Deployment 1 doesn't exist."
+          toExisting =
+            if to `elem` allDeps || to == 0
+              then to
+              else error "Deployment 2 doesn't exist."
+      compDeps <- selectDeps fromExisting toExisting conf
+      case compDeps of
+        (x, y) -> do
+          xStatus <- getStatus x conf
+          yStatus <- getStatus y conf
+          putStrLn $ "Comparing deployments " <> show x <> " and " <> show y
+          diffStati xStatus yStatus
 
-getRpmStatus :: Int -> Config.Config -> IO String
-getRpmStatus dep conf =
+getStatus :: Int -> Config.Config -> IO String
+getStatus dep conf =
   Dep.getDeployment dep conf >>= \fullDep ->
     let root =
           if Dep.rootDir fullDep == Just "/usr"
             then "/"
             else Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
-     in (return $ "rpm -qa --root=" <> root)
+     in (return $ listCmd (Config.packageManager conf) root)
+
+listCmd :: Config.PackageManager -> String -> String
+listCmd mgr root =
+  case mgr of
+    Config.Rpm -> "rpm -qa --root=" <> root
+    Config.Unknown -> " "
 
 diffStati :: String -> String -> IO ()
 diffStati from to =
   catch
     ( callCommand
-        ( "diff -y <("
-            <> Util.removeString "\n" from
-            <> " | sort) <("
+        ( Util.removeString "\n" from
+            <> " | sort > /tmp/hald_from && "
             <> Util.removeString "\n" to
-            <> " | sort) | grep \"|\\|>\\|<\""
+            <> " | sort > /tmp/hald_to"
         )
     )
-    (\e -> let _ = show (e :: IOException) in putStrLn "No difference found.")
+    ( \e ->
+        let _ = show (e :: IOException)
+         in putStrLn "Failed to create temporary files. Is /tmp writable?"
+    )
+    >> catch
+      (callCommand "diff -y /tmp/hald_from /tmp/hald_to | grep \"|\\|>\\|<\"")
+      (\e -> let _ = show (e :: IOException) in putStrLn "No difference found.")
