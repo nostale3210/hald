@@ -65,6 +65,7 @@ listCmd :: Config.PackageManager -> String -> String
 listCmd mgr root =
   case mgr of
     Config.Apk -> "apk list -I --root=" <> root <> " | sed \"s/\\s.*//\""
+    Config.Pacman -> "pacman -Q --root=" <> root
     Config.Rpm -> "rpm -qa --root=" <> root
     Config.Xbps -> "xbps-query -l --rootdir=" <> root <> " | awk '{print $2}'"
 

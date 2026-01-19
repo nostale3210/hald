@@ -5,6 +5,7 @@ import Main.Util qualified as Util
 
 data PackageManager
   = Apk
+  | Pacman
   | Rpm
   | Xbps
   | Unknown
@@ -110,6 +111,7 @@ selectPm :: String -> PackageManager
 selectPm strMgr =
   case strMgr of
     "apk" -> Apk
+    "pacman" -> Pacman
     "rpm" -> Rpm
     "xbps" -> Xbps
     _ -> Unknown
