@@ -6,6 +6,7 @@ import Main.Util qualified as Util
 data PackageManager
   = Apk
   | Rpm
+  | Xbps
   | Unknown
   deriving (Show, Eq)
 
@@ -110,4 +111,5 @@ selectPm strMgr =
   case strMgr of
     "apk" -> Apk
     "rpm" -> Rpm
+    "xbps" -> Xbps
     _ -> Unknown

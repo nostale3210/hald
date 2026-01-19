@@ -66,6 +66,7 @@ listCmd mgr root =
   case mgr of
     Config.Apk -> "apk list -I --root=" <> root <> " | sed \"s/\\s.*//\""
     Config.Rpm -> "rpm -qa --root=" <> root
+    Config.Xbps -> "xbps-query -l --rootdir=" <> root <> " | awk '{print $2}'"
 
 diffStati :: String -> String -> IO ()
 diffStati from to =
