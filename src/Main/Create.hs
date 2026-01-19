@@ -13,6 +13,7 @@ import System.Process
 createSkeleton :: Int -> Config.Config -> Bool -> IO ()
 createSkeleton depId conf uki =
   Util.ensureDirExists (Config.haldPath conf <> "/" <> show depId)
+    >> Util.createSymlink "usr/lib" (Config.haldPath conf <> "/" <> show depId <> "/lib")
     >> if uki
       then Util.ensureDirExists (Config.ukiPath conf)
       else Util.ensureDirExists (Config.bootPath conf <> "/" <> show depId)
@@ -50,6 +51,7 @@ createBootEntry depId conf = do
             <> Config.configPath conf
             <> "/boot.conf"
         )
+        >> raiseSignal sigTERM
 
 generateBootEntry :: Int -> String -> String
 generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)

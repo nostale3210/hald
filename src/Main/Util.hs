@@ -48,7 +48,7 @@ pathExists path =
     (\e -> let _ = show (e :: IOException) in return False)
 
 ensureDirExists :: FilePath -> IO ()
-ensureDirExists dir = do
+ensureDirExists dir =
   doesDirectoryExist dir >>= \dirExistence ->
     unless dirExistence $
       catch
@@ -57,6 +57,18 @@ ensureDirExists dir = do
             let err = show (e :: IOException)
              in printInfo ("Couldn't create missing directory " <> dir <> "; " <> err) False
         )
+
+createSymlink :: FilePath -> FilePath -> IO ()
+createSymlink from to =
+  catch
+    (callCommand $ "ln -sf " <> from <> " " <> to)
+    ( \e ->
+        let err = show (e :: IOException)
+         in printInfo
+              ( "Couldn't create symlink from " <> from <> " to " <> to <> "; " <> err
+              )
+              False
+    )
 
 isMountpoint :: FilePath -> IO Bool
 isMountpoint path =
