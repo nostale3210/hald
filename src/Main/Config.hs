@@ -4,7 +4,8 @@ import Control.Exception (IOException, catch)
 import Main.Util qualified as Util
 
 data PackageManager
-  = Rpm
+  = Apk
+  | Rpm
   | Unknown
   deriving (Show, Eq)
 
@@ -104,5 +105,6 @@ updateSingleKey conf key val =
 selectPm :: String -> PackageManager
 selectPm strMgr =
   case strMgr of
+    "apk" -> Apk
     "rpm" -> Rpm
     _ -> Unknown

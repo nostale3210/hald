@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+
 module Main.Diff where
 
 import Control.Exception (IOException, catch)
@@ -65,8 +67,8 @@ getStatus dep conf =
 listCmd :: Config.PackageManager -> String -> String
 listCmd mgr root =
   case mgr of
+    Config.Apk -> "apk list -I --root=" <> root <> " | sed \"s/\\s.*//\""
     Config.Rpm -> "rpm -qa --root=" <> root
-    Config.Unknown -> " "
 
 diffStati :: String -> String -> IO ()
 diffStati from to =
