@@ -22,7 +22,8 @@ data Config
     keepDeps :: Int,
     rootDir :: FilePath,
     interactive :: Bool,
-    packageManager :: PackageManager
+    packageManager :: PackageManager,
+    packageDB :: Maybe FilePath
   }
 
 defaultConfig :: Config
@@ -39,7 +40,8 @@ defaultConfig =
       keepDeps = 4,
       rootDir = "",
       interactive = False,
-      packageManager = Unknown
+      packageManager = Unknown,
+      packageDB = Nothing
     }
 
 getUserConfig :: Config -> IO String
@@ -100,6 +102,7 @@ updateSingleKey conf key val =
     "rootDir" -> conf {rootDir = val}
     "interactive" -> conf {interactive = read val :: Bool}
     "packageManager" -> conf {packageManager = selectPm val}
+    "packageDB" -> conf {packageDB = Just val}
     _ -> conf
 
 selectPm :: String -> PackageManager

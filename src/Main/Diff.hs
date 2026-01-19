@@ -58,10 +58,7 @@ printDiff from to conf =
 getStatus :: Int -> Config.Config -> IO String
 getStatus dep conf =
   Dep.getDeployment dep conf >>= \fullDep ->
-    let root =
-          if Dep.rootDir fullDep == Just "/usr"
-            then "/"
-            else Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
+    let root = Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
      in (return $ listCmd (Config.packageManager conf) root)
 
 listCmd :: Config.PackageManager -> String -> String

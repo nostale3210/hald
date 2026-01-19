@@ -3,10 +3,12 @@ module Main.Create where
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (nub)
+import Data.Maybe (fromMaybe)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.Directory
+import System.FilePath (takeDirectory)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process
 
@@ -297,3 +299,29 @@ installUki conf deployment = do
         ( \e -> let _ = show (e :: IOException) in raiseSignal sigTERM
         )
     Nothing -> raiseSignal sigTERM
+
+getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
+getPackageDB containerPath conf dep =
+  catch
+    ( Util.ensureDirExists
+        ( Config.haldPath conf
+            <> "/"
+            <> show (Dep.identifier dep)
+            <> "/"
+            <> takeDirectory (fromMaybe "" (Config.packageDB conf))
+        )
+        >> callCommand
+          ( "rsync -a "
+              <> containerPath
+              <> fromMaybe "" (Config.packageDB conf)
+              <> " "
+              <> fromMaybe "" (Dep.rootDir dep)
+              <> "/"
+              <> fromMaybe "" (Config.packageDB conf)
+          )
+    )
+    ( \e ->
+        let _ = show (e :: IOException)
+         in putStrLn "Failed fetching package db!"
+              >> raiseSignal sigTERM
+    )

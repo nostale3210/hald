@@ -11,6 +11,7 @@ import System.Directory
 rmDep :: Dep.Deployment -> Config.Config -> IO ()
 rmDep deployment conf = do
   tbRmDep <- tbRmDep'
+  currentDepId <- Dep.getCurrentDeploymentId (Config.rootDir conf)
   let bootComponents = Dep.bootComponents tbRmDep
   bootPathNoComps <- Util.pathExists (Config.bootPath conf <> "/" <> show depId)
   let tbRmBootComponents =
@@ -23,7 +24,7 @@ rmDep deployment conf = do
               }
           else
             bootComponents
-  if Dep.rootDir tbRmDep /= Just "/usr"
+  if Dep.identifier tbRmDep /= currentDepId
     then
       mapM_
         (uncurry (rmComponent depId conf))
@@ -106,13 +107,10 @@ checkDep depId conf = do
                     (Config.interactive conf)
           )
     else
-      if Dep.rootDir dep == Just "/usr"
-        then return ()
-        else
-          Util.printInfo
-            ("Collecting broken deployment " <> show depId <> "...")
-            (Config.interactive conf)
-            >> rmDep dep conf
+      Util.printInfo
+        ("Collecting broken deployment " <> show depId <> "...")
+        (Config.interactive conf)
+        >> rmDep dep conf
 
 componentPresent :: Maybe FilePath -> IO Bool
 componentPresent compPath =

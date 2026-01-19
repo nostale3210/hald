@@ -1,6 +1,7 @@
 module Main.Assemble.Create where
 
 import Control.Monad (unless, when)
+import Data.Maybe (isNothing)
 import Main.Assemble.Activate qualified as Asac
 import Main.Assemble.Gc qualified as Asgc
 import Main.Config qualified as Config
@@ -52,11 +53,14 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
 
     Util.printProgress msgCont "Syncing container image to root..."
     Container.syncImage containerMount $ Config.haldPath pbConf
-    Container.umountContainer "ald-root"
 
     Util.printProgress msgCont ("Syncing system config... (Dropping state: " <> show keep <> ")")
     Create.syncSystemConfig keep pbConf
     Create.createSkeleton (Dep.identifier newDep) pbConf uki
+
+    unless (isNothing (Config.packageDB pbConf)) $
+      Create.getPackageDB containerMount pbConf newDep
+    Container.umountContainer "ald-root"
 
     Util.printProgress msgCont "Creating hardlinks to new deployment..."
     Create.hardlinkDep newDep (Config.haldPath pbConf)

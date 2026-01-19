@@ -97,9 +97,8 @@ getBootComponents depId conf = do
 
 getDeployment :: Int -> Config.Config -> IO Deployment
 getDeployment depId conf = do
-  currentDepId <- getCurrentDeploymentId $ Config.rootDir conf
   let lFile = Config.haldPath conf <> "/." <> show depId
-      rDir = if depId == currentDepId then "/usr" else Config.haldPath conf <> "/" <> show depId
+      rDir = Config.haldPath conf <> "/" <> show depId
   lFileExists <- Util.pathExists lFile
   rDirExists <- Util.pathExists rDir
   rDirIsDir <-
