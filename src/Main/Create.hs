@@ -317,7 +317,8 @@ getPackageDB containerPath conf dep =
               <> " "
               <> fromMaybe "" (Dep.rootDir dep)
               <> "/"
-              <> fromMaybe "" (Config.packageDB conf)
+              <> takeDirectory (fromMaybe "" (Config.packageDB conf))
+              <> "/"
           )
     )
     ( \e ->
