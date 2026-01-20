@@ -5,6 +5,8 @@ set -oue pipefail
 if [[ "$1" == "--uki" ]]; then
     BUILD_UKI="y"
     shift
+else
+    BUILD_UKI="n"
 fi
 
 case $1 in
@@ -24,7 +26,7 @@ UKIPATH="${UKIPATH:-/boot/EFI/Linux}"
 
 hald "$@"
 
-deployment="$(find "${BOOTPATH:?}" -maxdepth 1 -mindepth 1 -type d -name "[0-9]*" | rev | cut -d"/" -f1 | rev | sort -nr | head -n1)"
+deployment="$(find "${ALDPATH:?}" -maxdepth 1 -mindepth 1 -type d -name "[0-9]*" | rev | cut -d"/" -f1 | rev | sort -nr | head -n1)"
 kver="$(ls "${ALDPATH:?}/${deployment:?}/usr/lib/modules")"
 
 mount -o bind "${ALDPATH:?}/${deployment:?}/usr/lib/modules" /usr/lib/modules
@@ -53,4 +55,8 @@ if [[ "$BUILD_UKI" == "y" ]]; then
         --output="${UKIPATH:?}/${deployment:?}.efi"
     rm -rf "${BOOTPATH:?}/${deployment:?}"
     rm -f "${BOOTPATH:?}/loader/entries/${deployment:?}.conf"
+
+    if command -v sbctl; then
+        sbctl sign "${UKIPATH:?}/${deployment:?}.efi"
+    fi
 fi
