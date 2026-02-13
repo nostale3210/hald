@@ -35,6 +35,16 @@ replaceString mtch rplc str =
   where
     ln = length mtch
 
+takeUntil :: String -> Char -> String
+takeUntil input stopChar =
+  case input of
+    [x] -> if x == stopChar then "" else [x]
+    x : xs ->
+      if x == stopChar
+        then ""
+        else [x] <> takeUntil xs stopChar
+    _ -> input
+
 newIdentifier :: [Int] -> Int
 newIdentifier idents =
   case idents of

@@ -2,7 +2,7 @@ module Main.Create where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
-import Data.List (nub)
+import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
@@ -113,7 +113,11 @@ mergeFiles inputA inputB outputFile = do
                 >> raiseSignal sigTERM
                 >> return ""
       )
-  let output = unlines . nub . lines $ contentA <> contentB
+  let output =
+        unlines
+          . nubBy (\a b -> Util.takeUntil a ':' == Util.takeUntil b ':')
+          . lines
+          $ contentA <> contentB
   catch
     (writeFile outputFile output)
     ( \e ->
