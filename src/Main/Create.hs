@@ -80,6 +80,8 @@ syncSystemConfig dropState conf = do
     >> removeTmpFile (Config.haldPath conf <> "/passwd")
   mergeFiles "/etc/shadow" (Config.haldPath conf <> "/shadow") (Config.haldPath conf <> "/image/etc/shadow")
     >> removeTmpFile (Config.haldPath conf <> "/shadow")
+  mergeFiles "/etc/group" (Config.haldPath conf <> "/group") (Config.haldPath conf <> "/image/etc/group")
+    >> removeTmpFile (Config.haldPath conf <> "/group")
 
 removeTmpFile :: FilePath -> IO ()
 removeTmpFile file =
