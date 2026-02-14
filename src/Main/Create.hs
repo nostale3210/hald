@@ -69,6 +69,8 @@ syncSystemConfig dropState conf = do
             <> Config.haldPath conf
             <> " && podman cp ald-root:/etc/shadow "
             <> Config.haldPath conf
+            <> " && podman cp ald-root:/etc/group "
+            <> Config.haldPath conf
         )
     )
     ( \e ->
