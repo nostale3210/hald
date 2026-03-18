@@ -68,6 +68,7 @@ jobs:
         run: |
           podman create --privileged -ti --name build \
             --mount type=bind,src=/tmp/certs,dst=/tmp/certs \
+            --mount type=bind,src=/etc/containers/registries.d,dst=/etc/containers/registries.d \
             --mount type=bind,src=./Containerfile,dst=/Containerfile \
             --mount type=bind,src=cosign.pub,dst=/cosign.pub \
             --mount type=bind,src=hald.cabal,dst=/hald.cabal \
