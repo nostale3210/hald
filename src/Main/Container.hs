@@ -41,7 +41,7 @@ buildImage :: String -> String -> FilePath -> IO ()
 buildImage podUri locTag confPath =
   catch
     ( callCommand
-        ( "podman build --isolation=chroot --build-arg=SOURCE_IMAGE="
+        ( "podman build --isolation=chroot --squash-all --build-arg=SOURCE_IMAGE="
             <> podUri
             <> " -t "
             <> locTag

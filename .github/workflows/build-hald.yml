@@ -66,22 +66,39 @@ jobs:
       - name: Build image
         shell: bash
         run: |
-          podman build --label=org.opencontainers.image.title=hald-utils \
+          podman create --privileged -ti --name build \
+            --mount type=bind,src=/tmp/certs,dst=/tmp/certs \
+            --mount type=bind,src=./Containerfile,dst=/Containerfile \
+            --mount type=bind,src=cosign.pub,dst=/cosign.pub \
+            --mount type=bind,src=hald.cabal,dst=/hald.cabal \
+            --mount type=bind,src=CHANGELOG.md,dst=/CHANGELOG.md \
+            --mount type=bind,src=LICENSE,dst=/LICENSE \
+            --mount type=bind,src=src,dst=/src \
+            --mount type=bind,src=utils,dst=/utils \
+            quay.io/podman/stable:latest
+          podman start build
+
+          podman exec --privileged build \
+            podman build --label=org.opencontainers.image.title=hald-utils \
             --label=org.opencontainers.image.description=hald-utils \
             --label=org.opencontainers.image.version=main \
-            --pull=newer --tag="localhost/hald-utils" \
+            --pull=newer \
+            --tag="localhost/hald-utils" \
             --target=target \
+            --squash-all \
             --annotation=io.github.containers.compression.zstd=true \
             -f ./Containerfile
 
       - name: Push image
         shell: bash
         run: |
-          podman login --username="${{ github.actor }}" --password="${{ secrets.GITHUB_TOKEN }}" ghcr.io
+          podman exec --privileged build \
+            podman login --username="${{ github.actor }}" --password="${{ secrets.GITHUB_TOKEN }}" ghcr.io
 
           push_pr() {
             FAILED=()
-            podman push "localhost/hald-utils" "${{ env.PR_TAG }}" \
+            podman exec --privileged build \
+              podman push "localhost/hald-utils" "${{ env.PR_TAG }}" \
               --compression-format="zstd:chunked" --tls-verify=true || FAILED+=("PR")
             if [[ "${{ github.event_name }}" == "pull_request" && "${FAILED[*]}" == *"PR"* ]]; then
               echo "PR failed!" && return 1
@@ -91,7 +108,8 @@ jobs:
           push_tag() {
             TAG="$1"
             FAILED=()
-            podman push "localhost/hald-utils" "${TAGS[$TAG]}" \
+            podman exec --privileged build \
+              podman push "localhost/hald-utils" "${TAGS[$TAG]}" \
               --compression-format="zstd:chunked" --tls-verify=true \
               --sign-by-sigstore-private-key=/tmp/certs/SIGNING_SECRET.key || FAILED+=("$TAG")
             if [[ "${FAILED[*]}" == *"DATE"* && "${{ github.event_name }}" != "pull_request" ]]; then
