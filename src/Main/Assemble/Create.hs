@@ -90,6 +90,9 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
             Util.signKernel (Config.bootPath pbConf) (Dep.identifier newDep) "/vmlinuz"
       unless signingSuccess (Util.printInfo "Signing kernel failed!" (Config.interactive pbConf))
 
+    Util.printProgress msgCont "Setting default bootloader entry..."
+    Create.setDefaultBootEntry (Dep.identifier newDep)
+
     when act $ Asac.deploymentActivationAssembly (Dep.identifier newDep) pbConf msgCont
 
     when gc $ Asgc.deploymentGcAssembly pbConf msgCont

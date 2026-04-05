@@ -334,3 +334,14 @@ getPackageDB containerPath conf dep =
          in putStrLn "Failed fetching package db!"
               >> raiseSignal sigTERM
     )
+
+setDefaultBootEntry :: Int -> IO ()
+setDefaultBootEntry dep =
+  catch
+    ( callCommand
+      ("hash bootctl 2>/dev/null && bootctl set-default \"*" <> show dep <> "*\"")
+    )
+    ( \e ->
+        let _ = show (e :: IOException)
+         in putStr ""
+    )
