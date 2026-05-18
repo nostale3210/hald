@@ -58,19 +58,21 @@ createBootEntry depId conf = do
 generateBootEntry :: Int -> String -> String
 generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
 
-syncSystemConfig :: Bool -> Config.Config -> IO ()
-syncSystemConfig dropState conf = do
+syncSystemConfig :: Bool -> Config.Config -> Dep.Deployment -> IO ()
+syncSystemConfig dropState conf dep = do
+  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
   if dropState
-    then syncMinimumState (Config.haldPath conf)
-    else syncState conf
+    then syncMinimumState depPath
+    else syncState conf depPath
   catch
     ( callCommand
         ( "podman cp ald-root:/etc/passwd "
-            <> Config.haldPath conf
-            <> " && podman cp ald-root:/etc/shadow "
-            <> Config.haldPath conf
-            <> " && podman cp ald-root:/etc/group "
-            <> Config.haldPath conf
+            <> depPath
+            <> "/.tmp.passwd && podman cp ald-root:/etc/shadow "
+            <> depPath
+            <> "/.tmp.shadow && podman cp ald-root:/etc/group "
+            <> depPath
+            <> "/.tmp.group"
         )
     )
     ( \e ->
@@ -78,12 +80,12 @@ syncSystemConfig dropState conf = do
          in Util.printInfo ("Couldn't sync system config!\n" <> err) (Config.interactive conf)
               >> raiseSignal sigTERM
     )
-  mergeFiles "/etc/passwd" (Config.haldPath conf <> "/passwd") (Config.haldPath conf <> "/image/etc/passwd")
-    >> removeTmpFile (Config.haldPath conf <> "/passwd")
-  mergeFiles "/etc/shadow" (Config.haldPath conf <> "/shadow") (Config.haldPath conf <> "/image/etc/shadow")
-    >> removeTmpFile (Config.haldPath conf <> "/shadow")
-  mergeFiles "/etc/group" (Config.haldPath conf <> "/group") (Config.haldPath conf <> "/image/etc/group")
-    >> removeTmpFile (Config.haldPath conf <> "/group")
+  mergeFiles "/etc/passwd" (depPath <> "/.tmp.passwd") (depPath <> "/etc/passwd")
+    >> removeTmpFile (depPath <> "/.tmp.passwd")
+  mergeFiles "/etc/shadow" (depPath <> "/.tmp.shadow") (depPath <> "/etc/shadow")
+    >> removeTmpFile (depPath <> "/.tmp.shadow")
+  mergeFiles "/etc/group" (depPath <> "/.tmp.group") (depPath <> "/etc/group")
+    >> removeTmpFile (depPath <> "/.tmp.group")
 
 removeTmpFile :: FilePath -> IO ()
 removeTmpFile file =
@@ -131,7 +133,7 @@ mergeFiles inputA inputB outputFile = do
     )
 
 syncMinimumState :: FilePath -> IO ()
-syncMinimumState hp =
+syncMinimumState depPath =
   syncSingleFile
     ( words
         ( "/etc/fstab /etc/crypttab /etc/locale.conf /etc/localtime "
@@ -142,11 +144,11 @@ syncMinimumState hp =
             <> "/etc/X11/xinit/xinput.d/ibus.conf"
         )
     )
-    (hp <> "/image/")
+    (depPath <> "/")
 
-syncState :: Config.Config -> IO ()
-syncState conf =
-  let syncCmd = "rsync -aRI \"$@\" " <> Config.haldPath conf <> "/image/ >/dev/null 2>&1 || :"
+syncState :: Config.Config -> FilePath -> IO ()
+syncState conf depPath =
+  let syncCmd = "rsync -aRI \"$@\" " <> depPath <> " >/dev/null 2>&1 || :"
       xargsSync = "xargs -n1 -P\"$(($(nproc --all)/2))\" bash -c '" <> syncCmd <> "' _"
    in catch
         ( callCommand
@@ -165,7 +167,7 @@ syncState conf =
              in putStrLn err
                   >> raiseSignal sigTERM
         )
-        >> syncMinimumState (Config.haldPath conf)
+        >> syncMinimumState depPath
 
 syncSingleFile :: [FilePath] -> FilePath -> IO ()
 syncSingleFile files destination
@@ -192,57 +194,77 @@ syncSingleFile files destination
         )
         files
 
-hardlinkDep :: Dep.Deployment -> FilePath -> IO ()
-hardlinkDep deployment hp = do
+syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
+syncDeploymentUsr containerMount conf dep linkSource = do
+  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
+  Util.ensureDirExists $ depPath <> "/usr"
+  let linkDest = case linkSource of
+        Just src -> "--link-dest=\"../../" <> show src <> "/usr/\" "
+        Nothing -> ""
   catch
     ( callCommand
-        ( "podman cp -a ald-root:/files "
-            <> hp
-            <> "/."
-            <> show (Dep.identifier deployment)
-            <> " >/dev/null 2>&1"
-        )
-    )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in catch
-              (writeFile (hp <> "/." <> show (Dep.identifier deployment)) "")
-              (\e2 -> let _ = show (e2 :: IOException) in raiseSignal sigTERM)
-    )
-  Util.ensureDirExists $ hp <> "/" <> show (Dep.identifier deployment) <> "/usr"
-  catch
-    ( callCommand
-        ( "rsync -aHlx --link-dest=\"../../image/usr/\" "
-            <> hp
-            <> "/image/usr/ "
-            <> hp
-            <> "/"
-            <> show (Dep.identifier deployment)
+        ( "rsync -aHlx "
+            <> linkDest
+            <> containerMount
+            <> "/usr/ "
+            <> depPath
             <> "/usr/"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
   catch
     ( writeFile
-        ( hp
-            <> "/"
-            <> show (Dep.identifier deployment)
-            <> "/usr/.ald_dep"
-        )
-        (show (Dep.identifier deployment))
+        (depPath <> "/usr/.ald_dep")
+        (show (Dep.identifier dep))
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+
+syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
+syncDeploymentEtc containerMount conf dep = do
+  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
   catch
     ( callCommand
         ( "rsync -aHlx "
-            <> hp
-            <> "/image/etc "
-            <> hp
-            <> "/"
-            <> show (Dep.identifier deployment)
+            <> containerMount
+            <> "/etc/ "
+            <> depPath
+            <> "/etc/"
         )
     )
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+
+normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
+normalizeDepEtcTimestamps conf dep = do
+  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
+  catch
+    ( callCommand
+        ( "find "
+            <> depPath
+            <> "/etc -mindepth 1 "
+            <> "-execdir sh -c \"touch -d 1970-01-01T01:00:00 '{}' >/dev/null 2>&1 || :\" \\;"
+        )
+    )
+    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+
+copyContainerFiles :: Config.Config -> Dep.Deployment -> IO ()
+copyContainerFiles conf dep = do
+  let hp = Config.haldPath conf
+      depId = Dep.identifier dep
+  catch
+    ( callCommand
+        ( "podman cp -a ald-root:/files "
+            <> hp
+            <> "/."
+            <> show depId
+            <> " >/dev/null 2>&1"
+        )
+    )
+    ( \e ->
+        let _ = show (e :: IOException)
+         in catch
+              (writeFile (hp <> "/." <> show depId) "")
+              (\e2 -> let _ = show (e2 :: IOException) in raiseSignal sigTERM)
+    )
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
 modulePathSearch conf deployment target =

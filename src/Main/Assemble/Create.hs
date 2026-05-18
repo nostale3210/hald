@@ -39,6 +39,10 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
       (Config.interactive conf)
     Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
     Space.gcBroken existingDeps conf
+    remainingDeps <- Dep.getDeploymentsInt conf
+    let linkSource = case filter (< Dep.identifier newDep) remainingDeps of
+          [] -> Nothing
+          xs -> Just $ maximum xs
 
     when build $
       Container.buildImage
@@ -51,19 +55,26 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
             else conf
     containerMount <- Container.mountContainer "ald-root" $ Config.containerUri pbConf
 
-    Util.printProgress msgCont "Syncing container image to root..."
-    Container.syncImage containerMount $ Config.haldPath pbConf
+    Create.createSkeleton (Dep.identifier newDep) pbConf uki
+
+    Util.printProgress msgCont "Syncing deployment usr..."
+    Create.syncDeploymentUsr containerMount pbConf newDep linkSource
+
+    Util.printProgress msgCont "Syncing deployment etc..."
+    Create.syncDeploymentEtc containerMount pbConf newDep
+
+    Util.printProgress msgCont "Normalizing container etc timestamps..."
+    Create.normalizeDepEtcTimestamps pbConf newDep
 
     Util.printProgress msgCont ("Syncing system config... (Dropping state: " <> show keep <> ")")
-    Create.syncSystemConfig keep pbConf
-    Create.createSkeleton (Dep.identifier newDep) pbConf uki
+    Create.syncSystemConfig keep pbConf newDep
 
     unless (isNothing (Config.packageDB pbConf)) $
       Create.getPackageDB containerMount pbConf newDep
     Container.umountContainer "ald-root"
 
-    Util.printProgress msgCont "Creating hardlinks to new deployment..."
-    Create.hardlinkDep newDep (Config.haldPath pbConf)
+    Util.printProgress msgCont "Copying container files..."
+    Create.copyContainerFiles pbConf newDep
     Container.rmContainer "ald-root"
 
     Util.printProgress msgCont "Placing kernel and initramfs..."
