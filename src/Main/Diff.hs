@@ -2,6 +2,7 @@
 
 module Main.Diff where
 
+import Control.Concurrent.Async (concurrently)
 import Control.Exception (IOException, catch)
 import Data.List (sortBy)
 import Data.Maybe qualified
@@ -9,7 +10,8 @@ import Data.Ord (Down (..), comparing)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
-import System.Process (callCommand)
+import System.IO (hClose, openTempFile)
+import System.Process (readProcess)
 
 selectDeployment :: [Int] -> [Int] -> Int
 selectDeployment allDeps selected =
@@ -50,8 +52,7 @@ printDiff from to conf =
       compDeps <- selectDeps fromExisting toExisting conf
       case compDeps of
         (x, y) -> do
-          xStatus <- getStatus x conf
-          yStatus <- getStatus y conf
+          (xStatus, yStatus) <- concurrently (getStatus x conf) (getStatus y conf)
           putStrLn $ "Comparing deployments " <> show x <> " and " <> show y
           diffStati xStatus yStatus
 
@@ -70,19 +71,25 @@ listCmd mgr root =
     Config.Xbps -> "xbps-query -l --rootdir=" <> root <> " | awk '{print $2}'"
 
 diffStati :: String -> String -> IO ()
-diffStati from to =
+diffStati from to = do
+  (tmpFrom, hFrom) <- openTempFile "/tmp" "hald_from"
+  (tmpTo, hTo) <- openTempFile "/tmp" "hald_to"
+  hClose hFrom
+  hClose hTo
   catch
-    ( callCommand
-        ( Util.removeString "\n" from
-            <> " | sort > /tmp/hald_from && "
-            <> Util.removeString "\n" to
-            <> " | sort > /tmp/hald_to"
-        )
+    ( do
+        fromOutput <- readProcess "sh" ["-c", Util.removeString "\n" from <> " | sort"] ""
+        writeFile tmpFrom fromOutput
+        toOutput <- readProcess "sh" ["-c", Util.removeString "\n" to <> " | sort"] ""
+        writeFile tmpTo toOutput
     )
     ( \e ->
         let _ = show (e :: IOException)
          in putStrLn "Failed to create temporary files. Is /tmp writable?"
     )
     >> catch
-      (callCommand "diff -y /tmp/hald_from /tmp/hald_to | grep \"|\\|>\\|<\"")
+      ( do
+          diffOutput <- readProcess "sh" ["-c", "diff -y " <> tmpFrom <> " " <> tmpTo <> " | grep \"|\\|>\\|<\""] ""
+          putStr diffOutput
+      )
       (\e -> let _ = show (e :: IOException) in putStrLn "No difference found.")

@@ -1,5 +1,6 @@
 module Main.Assemble.Gc where
 
+import Main.CAS.GC qualified as CasGc
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Fail qualified as Fail
@@ -23,4 +24,6 @@ deploymentGcAssembly conf msgCont = do
   Space.gcBroken allDeps conf
   newAllDeps <- Dep.getDeploymentsInt conf
   Space.rmDeps (Config.keepDeps conf) newAllDeps conf
+  remainingDeps <- Dep.getDeploymentsInt conf
+  CasGc.collectGarbage conf remainingDeps
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

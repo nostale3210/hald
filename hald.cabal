@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               hald
-version:            0.4.2.3
+version:            0.5.1.2
 synopsis: Container-based system update utility
 -- description:
 license:            LicenseRef-GLWTPL
@@ -25,6 +25,9 @@ executable hald
         Main.Assemble.Create,
         Main.Assemble.Gc,
         Main.Assemble.Remove,
+        Main.CAS.GC,
+        Main.CAS.Hash,
+        Main.CAS.Ingest,
         Main.Cli,
         Main.Config,
         Main.Container,
@@ -38,8 +41,9 @@ executable hald
         Main.Util
     -- other-extensions:
     build-depends:
-        Glob,
+        async,
         base,
+        blake3,
         bytestring,
         containers,
         directory,

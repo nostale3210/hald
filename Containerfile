@@ -11,6 +11,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | \
     "$HOME/.ghcup/bin/ghcup" install ghc --set && \
     "$HOME/.ghcup/bin/ghcup" install cabal --set
 
+COPY cabal.project /hald-build/cabal.project
 COPY CHANGELOG.md /hald-build/CHANGELOG.md
 COPY hald.cabal /hald-build/hald.cabal
 COPY LICENSE /hald-build/LICENSE

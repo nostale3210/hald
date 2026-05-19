@@ -1,24 +1,27 @@
 module Main.Create where
 
+import Control.Concurrent.Async (concurrently)
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
+import Main.CAS.Ingest qualified as CAS
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
-import System.Directory
-import System.FilePath (takeDirectory)
+import System.Directory (copyFile, removeFile)
+import System.FilePath ((</>), takeDirectory)
 import System.Posix.Signals (raiseSignal, sigTERM)
-import System.Process
+import System.Process (callCommand)
 
-createSkeleton :: Int -> Config.Config -> Bool -> IO ()
-createSkeleton depId conf uki =
-  Util.ensureDirExists (Config.haldPath conf <> "/" <> show depId)
-    >> Util.createSymlink "usr/lib" (Config.haldPath conf <> "/" <> show depId <> "/lib")
+createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
+createSkeleton depId conf uki backend =
+  Util.ensureDirExists (Config.haldPath conf </> show depId)
+    >> writeFile (Config.haldPath conf </> show depId <> "/.backend") (show backend)
+    >> Util.createSymlink "usr/lib" (Config.haldPath conf </> show depId <> "/lib")
     >> if uki
       then Util.ensureDirExists (Config.ukiPath conf)
-      else Util.ensureDirExists (Config.bootPath conf <> "/" <> show depId)
+      else Util.ensureDirExists (Config.bootPath conf </> show depId)
 
 createBootEntry :: Int -> Config.Config -> IO ()
 createBootEntry depId conf = do
@@ -48,19 +51,19 @@ createBootEntry depId conf = do
                   >> raiseSignal sigTERM
         )
     else
-      error
-        ( "No boot entry template found, make sure it exists at "
-            <> Config.configPath conf
-            <> "/boot.conf"
-        )
-        >> raiseSignal sigTERM
+      raiseSignal sigTERM
+        >> error
+          ( "No boot entry template found, make sure it exists at "
+              <> Config.configPath conf
+              <> "/boot.conf"
+          )
 
 generateBootEntry :: Int -> String -> String
 generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
 
 syncSystemConfig :: Bool -> Config.Config -> Dep.Deployment -> IO ()
 syncSystemConfig dropState conf dep = do
-  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
+  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
   if dropState
     then syncMinimumState depPath
     else syncState conf depPath
@@ -195,23 +198,34 @@ syncSingleFile files destination
         files
 
 syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
-syncDeploymentUsr containerMount conf dep linkSource = do
-  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
-  Util.ensureDirExists $ depPath <> "/usr"
-  let linkDest = case linkSource of
-        Just src -> "--link-dest=\"../../" <> show src <> "/usr/\" "
-        Nothing -> ""
+syncDeploymentUsr containerMount conf dep linkSource =
+  case Dep.backend dep of
+    Dep.Hardlink -> syncDeploymentUsrHardlink containerMount conf dep linkSource
+    Dep.Cas -> syncDeploymentUsrCas containerMount conf dep
+
+syncDeploymentUsrHardlink :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
+syncDeploymentUsrHardlink containerMount conf dep linkSource = do
+  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
+      depUsr = depPath <> "/usr"
+  Util.ensureDirExists depUsr
+  let rsyncBase = "rsync -aHlx " <> containerMount <> "/usr/ " <> depUsr <> "/"
+      rsyncCmd = case linkSource of
+        Just src -> rsyncBase <> " --link-dest=../../" <> show src <> "/usr"
+        Nothing -> rsyncBase
+  catch (callCommand rsyncCmd) (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
   catch
-    ( callCommand
-        ( "rsync -aHlx "
-            <> linkDest
-            <> containerMount
-            <> "/usr/ "
-            <> depPath
-            <> "/usr/"
-        )
-    )
+    (writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep)))
     (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+
+syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
+syncDeploymentUsrCas containerMount conf dep = do
+  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
+      casDir = Config.haldPath conf <> "/objects"
+      depUsr = depPath <> "/usr"
+  Util.ensureDirExists casDir
+  Util.ensureDirExists depUsr
+  assetMap <- CAS.ingestPath (containerMount <> "/usr") casDir
+  CAS.deployTree depUsr assetMap
   catch
     ( writeFile
         (depPath <> "/usr/.ald_dep")
@@ -221,7 +235,7 @@ syncDeploymentUsr containerMount conf dep linkSource = do
 
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
-  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
+  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
   catch
     ( callCommand
         ( "rsync -aHlx "
@@ -235,7 +249,7 @@ syncDeploymentEtc containerMount conf dep = do
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
 normalizeDepEtcTimestamps conf dep = do
-  let depPath = Config.haldPath conf <> "/" <> show (Dep.identifier dep)
+  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
   catch
     ( callCommand
         ( "find "
@@ -267,20 +281,27 @@ copyContainerFiles conf dep = do
     )
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
-modulePathSearch conf deployment target =
-  Util.recursiveFileSearch
-    ( Config.haldPath conf
-        <> "/"
-        <> show (Dep.identifier deployment)
-        <> "/usr/lib/modules"
-    )
-    target
-    >>= \path -> return $ head path
+modulePathSearch conf deployment target = do
+  paths <-
+    Util.recursiveFileSearch
+      ( Config.haldPath conf
+          <> "/"
+          <> show (Dep.identifier deployment)
+          <> "/usr/lib/modules"
+      )
+      target
+  case paths of
+    [] -> do
+      raiseSignal sigTERM
+      error $ "No " <> target <> " found in deployment " <> show (Dep.identifier deployment)
+    x : _ -> return x
 
 placeBootFiles :: Config.Config -> Dep.Deployment -> IO ()
 placeBootFiles conf deployment = do
-  kernel <- modulePathSearch conf deployment "vmlinuz"
-  initrd <- modulePathSearch conf deployment "initramfs.img"
+  (kernel, initrd) <-
+    concurrently
+      (modulePathSearch conf deployment "vmlinuz")
+      (modulePathSearch conf deployment "initramfs.img")
   let bootComps = Dep.bootComponents deployment
   case Dep.bootDir bootComps of
     Just x -> do
@@ -290,8 +311,10 @@ placeBootFiles conf deployment = do
 
 installUki :: Config.Config -> Dep.Deployment -> IO ()
 installUki conf deployment = do
-  kernel <- modulePathSearch conf deployment "vmlinuz"
-  initrd <- modulePathSearch conf deployment "initramfs.img"
+  (kernel, initrd) <-
+    concurrently
+      (modulePathSearch conf deployment "vmlinuz")
+      (modulePathSearch conf deployment "initramfs.img")
   templCmdline <-
     catch
       ( readFile $
@@ -361,7 +384,7 @@ setDefaultBootEntry :: Int -> IO ()
 setDefaultBootEntry dep =
   catch
     ( callCommand
-      ("hash bootctl 2>/dev/null && bootctl set-default \"*" <> show dep <> "*\"")
+        ("hash bootctl 2>/dev/null && bootctl set-default \"*" <> show dep <> "*\"")
     )
     ( \e ->
         let _ = show (e :: IOException)

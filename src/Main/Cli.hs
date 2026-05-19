@@ -17,7 +17,8 @@ data Command
         gcFlag :: Bool,
         stateFlag :: Bool,
         secureBoot :: Bool,
-        uki :: Bool
+        uki :: Bool,
+        casFlag :: Bool
       }
   | Activate Int
   | Status
@@ -115,6 +116,13 @@ depOptions =
       ( long "uki"
           <> short 'k'
           <> help "Build UKI using ukify"
+      )
+    <*> flag
+      False
+      True
+      ( long "cas"
+          <> short 'c'
+          <> help "Use content-addressable store (CAS) backend"
       )
 
 rmCommand :: Mod CommandFields Command

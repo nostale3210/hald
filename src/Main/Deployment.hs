@@ -1,24 +1,24 @@
 module Main.Deployment where
 
 import Control.Exception (IOException, catch)
+import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Util qualified as Util
-import System.Directory (doesDirectoryExist)
-import System.FilePath.Glob
+import System.Directory (doesDirectoryExist, listDirectory)
+import System.FilePath ((</>))
+
+data Backend = Hardlink | Cas deriving (Show, Eq)
 
 data Deployment
   = Deployment
   { identifier :: Int,
+    backend :: Backend,
     lockfile :: Maybe FilePath,
     rootDir :: Maybe FilePath,
     bootComponents :: BootComponents
   }
   deriving (Show, Eq)
-
-instance Ord Deployment where
-  (<) depA depB = identifier depA < identifier depB
-  (<=) depA depB = identifier depA <= identifier depB
 
 data BootComponents
   = BootComponents
@@ -28,13 +28,14 @@ data BootComponents
   }
   deriving (Show, Eq)
 
-createDeployment :: [Int] -> Config.Config -> Deployment
-createDeployment exDeps conf =
+createDeployment :: [Int] -> Config.Config -> Backend -> Deployment
+createDeployment exDeps conf backend =
   let depId = Util.newIdentifier exDeps
    in Deployment
         { identifier = depId,
+          backend = backend,
           lockfile = Just (Config.haldPath conf <> "/." <> show depId),
-          rootDir = Just (Config.haldPath conf <> "/" <> show depId),
+          rootDir = Just (Config.haldPath conf </> show depId),
           bootComponents = createBootPaths depId conf
         }
 
@@ -42,6 +43,7 @@ dummyDeployment :: Deployment
 dummyDeployment =
   Deployment
     { identifier = -1,
+      backend = Hardlink,
       lockfile = Nothing,
       rootDir = Nothing,
       bootComponents =
@@ -55,16 +57,16 @@ dummyDeployment =
 createBootPaths :: Int -> Config.Config -> BootComponents
 createBootPaths depId conf =
   BootComponents
-    { bootDir = Just (Config.bootPath conf <> "/" <> show depId),
+    { bootDir = Just (Config.bootPath conf </> show depId),
       bootEntry = Just (Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf"),
-      ukiPath = Just (Config.ukiPath conf <> "/" <> show depId <> ".efi")
+      ukiPath = Just (Config.ukiPath conf </> show depId <> ".efi")
     }
 
 getBootComponents :: Int -> Config.Config -> IO BootComponents
 getBootComponents depId conf = do
-  let bPath = Config.bootPath conf <> "/" <> show depId
+  let bPath = Config.bootPath conf </> show depId
       bEntry = Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf"
-      uki = Config.ukiPath conf <> "/" <> show depId <> ".efi"
+      uki = Config.ukiPath conf </> show depId <> ".efi"
   bPathExists <- Util.pathExists bPath
   bPathIsDir <-
     if bPathExists
@@ -98,18 +100,28 @@ getBootComponents depId conf = do
 getDeployment :: Int -> Config.Config -> IO Deployment
 getDeployment depId conf = do
   let lFile = Config.haldPath conf <> "/." <> show depId
-      rDir = Config.haldPath conf <> "/" <> show depId
+      rDir = Config.haldPath conf </> show depId
+      markerFile = rDir <> "/.backend"
   lFileExists <- Util.pathExists lFile
   rDirExists <- Util.pathExists rDir
   rDirIsDir <-
     if rDirExists
-      then do
-        doesDirectoryExist rDir
+      then doesDirectoryExist rDir
       else return False
+  markerExists <- Util.pathExists markerFile
+  backend <-
+    if markerExists
+      then
+        readFile markerFile >>= \content ->
+          case listToMaybe (lines content) of
+            Just "cas" -> return Cas
+            _ -> return Hardlink
+      else return Hardlink
   bComponents <- getBootComponents depId conf
   return
     Deployment
       { identifier = depId,
+        backend = backend,
         lockfile = if lFileExists then Just lFile else Nothing,
         rootDir = if rDirExists && rDirIsDir then Just rDir else Nothing,
         bootComponents = bComponents
@@ -117,23 +129,38 @@ getDeployment depId conf = do
 
 getDeployments :: Config.Config -> IO [FilePath]
 getDeployments conf = do
-  lockfiles <- globDir1 (compile ".[0-9]*") (Config.haldPath conf)
-  rootDirs <- globDir1 (compile "[0-9]*") (Config.haldPath conf)
-  bootDirs <- globDir1 (compile "[0-9]*") (Config.bootPath conf)
-  bootEntrys <- globDir1 (compile "[0-9]*.conf") (Config.bootPath conf <> "/loader/entries")
-  ukis <- globDir1 (compile ".[0-9]*") (Config.ukiPath conf)
-  let lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (Config.haldPath conf <> "/")) lockfiles
-      rootSet = Set.fromList $ map (Util.removeString (Config.haldPath conf <> "/")) rootDirs
-      bootDSet = Set.fromList $ map (Util.removeString (Config.bootPath conf <> "/")) bootDirs
-      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (Config.bootPath conf <> "/loader/entries/")) bootEntrys
-      ukiSet = Set.fromList $ map (Util.removeString ".efi" . Util.removeString (Config.ukiPath conf)) ukis
+  let hp = Config.haldPath conf
+      bp = Config.bootPath conf
+      ep = bp <> "/loader/entries"
+      up = Config.ukiPath conf
+      startsWithDigit (d:_) = d `elem` ['0' .. '9']
+      startsWithDigit _ = False
+      startsWithDotDigit ('.' : d : _) = d `elem` ['0' .. '9']
+      startsWithDotDigit _ = False
+      isNumericConf f =
+        not (null f)
+          && head f `elem` ['0' .. '9']
+          && let l = length f in l >= 6 && drop (l - 5) f == ".conf"
+  hpEntries <- catch (listDirectory hp) (\(_ :: IOException) -> return [])
+  bdEntries <- catch (listDirectory bp) (\(_ :: IOException) -> return [])
+  beEntries <- catch (listDirectory ep) (\(_ :: IOException) -> return [])
+  ukiEntries <- catch (listDirectory up) (\(_ :: IOException) -> return [])
+  let lockfiles = map (hp </>) $ filter startsWithDotDigit hpEntries
+      rootDirs = map (hp </>) $ filter startsWithDigit hpEntries
+      bootDirs = map (bp </>) $ filter startsWithDigit bdEntries
+      bootEntrys = map (ep </>) $ filter isNumericConf beEntries
+      ukis = map (up </>) $ filter startsWithDotDigit ukiEntries
+      lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (hp <> "/")) lockfiles
+      rootSet = Set.fromList $ map (Util.removeString (hp <> "/")) rootDirs
+      bootDSet = Set.fromList $ map (Util.removeString (bp <> "/")) bootDirs
+      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (ep <> "/")) bootEntrys
+      ukiSet = Set.fromList $ map (Util.removeString ".efi" . Util.removeString (up <> "/")) ukis
   return $ Set.toList $ Set.union ukiSet $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
 
 getDeploymentsInt :: Config.Config -> IO [Int]
 getDeploymentsInt conf =
   getDeployments conf >>= \deployments ->
-    let intdeps = map (\d -> read d :: Int) deployments
-     in return intdeps
+    return $ mapMaybe (fmap fst . listToMaybe . reads) deployments
 
 getCurrentDeploymentId :: FilePath -> IO Int
 getCurrentDeploymentId root =
@@ -145,9 +172,6 @@ getCurrentDeploymentId root =
               >> return "0"
     )
     >>= \content ->
-      return (read (head $ lines content) :: Int)
-
-getDeploymentId :: Int -> FilePath -> IO Int
-getDeploymentId depId hp =
-  readFile (hp <> "/" <> show depId <> "/usr/.ald_dep") >>= \content ->
-    return (read (head $ lines content) :: Int)
+      case reads (head $ lines content) of
+        [(n, "")] -> return n
+        _ -> return 0

@@ -73,6 +73,7 @@ applyConfigKeys conf confKeys =
     x : xs -> applyConfigKeys (applyConfigKey conf x) xs
 
 applyConfigKey :: Config -> [String] -> Config
+applyConfigKey conf [] = conf
 applyConfigKey conf configKey = updateSingleKey conf (head configKey) (last configKey)
 
 updateSingleKey :: Config -> String -> String -> Config
@@ -100,9 +101,9 @@ updateSingleKey conf key val =
         ]
     "containerUri" -> conf {containerUri = val}
     "localTag" -> conf {localTag = val}
-    "keepDeps" -> conf {keepDeps = read val :: Int}
+    "keepDeps" -> conf {keepDeps = case reads val of [(n, "")] -> n; _ -> keepDeps conf}
     "rootDir" -> conf {rootDir = val}
-    "interactive" -> conf {interactive = read val :: Bool}
+    "interactive" -> conf {interactive = case reads val of [(b, "")] -> b; _ -> interactive conf}
     "packageManager" -> conf {packageManager = selectPm val}
     "packageDB" -> conf {packageDB = Just val}
     _ -> conf

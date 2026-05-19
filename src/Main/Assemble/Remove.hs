@@ -1,5 +1,6 @@
 module Main.Assemble.Remove where
 
+import Main.CAS.GC qualified as CasGc
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Fail qualified as Fail
@@ -28,4 +29,5 @@ deploymentErasureAssembly depId conf msgCont = do
   Util.printProgress msgCont ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
   Lock.umountDirForcibly Lock.Rfl $ Config.haldPath conf
   Space.rmDep tbRmDep conf
+  CasGc.restoreStoreFlags conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

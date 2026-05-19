@@ -89,7 +89,7 @@ activateNewRoot root hp newDep = do
            in Util.printInfo ("Couldn't read deployment ID; " <> err) False
                 >> return "0"
       )
-  let oldId = read (head $ words idFileContent) :: Int
+  let oldId = case reads (head $ words idFileContent) of [(n, "")] -> n; _ -> 0
       newId = Dep.identifier newDep
       signalsToBlock = addSignal sigTERM . addSignal sigINT $ emptySignalSet
   usrMounted <- Util.isMountpoint $ root <> "/usr"

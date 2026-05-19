@@ -1,0 +1,4 @@
+packages: .
+
+package blake3
+  ghc-options: -optc=-D_FORTIFY_SOURCE=0

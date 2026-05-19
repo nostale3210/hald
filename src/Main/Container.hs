@@ -3,7 +3,7 @@ module Main.Container where
 import Control.Exception (IOException, catch)
 import Main.Util qualified as Util
 import System.Posix.Signals (raiseSignal, sigTERM)
-import System.Process
+import System.Process (callCommand, readProcess)
 
 mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =

@@ -1,12 +1,13 @@
 module Main.Status where
 
+import Control.Concurrent.Async (mapConcurrently)
 import Control.Exception (IOException, catch)
 import Data.List (isPrefixOf, sort)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
-import System.FilePath (takeBaseName, takeDirectory)
-import System.FilePath.Glob (compile, globDir1)
+import System.Directory (listDirectory)
+import System.FilePath ((</>), takeBaseName, takeDirectory)
 
 data DepStatus
   = DepStatus
@@ -23,7 +24,7 @@ getDepStatus conf dep = do
   let osReleasePath =
         if currentDepId == Dep.identifier dep
           then Config.rootDir conf <> "/usr/lib/os-release"
-          else Config.haldPath conf <> "/" <> show (Dep.identifier dep) <> "/usr/lib/os-release"
+          else Config.haldPath conf </> show (Dep.identifier dep) <> "/usr/lib/os-release"
   osReleaseExists <- Util.pathExists osReleasePath
   osReleaseContent <-
     if osReleaseExists
@@ -56,7 +57,7 @@ returnOsField field content =
 
 returnKernelVersion :: FilePath -> IO String
 returnKernelVersion fp =
-  globDir1 (compile "*") (takeDirectory fp <> "/modules") >>= \modulesContent ->
+  listDirectory (takeDirectory fp <> "/modules") >>= \modulesContent ->
     return . takeBaseName $ unwords modulesContent
 
 printDepStati :: Config.Config -> IO ()
@@ -64,7 +65,7 @@ printDepStati conf = do
   allDeps <- Dep.getDeploymentsInt conf
   let sortedDeps = sort allDeps
   depList <-
-    mapM
+    mapConcurrently
       ( \dep ->
           Dep.getDeployment dep conf >>= \fullDep ->
             getDepStatus

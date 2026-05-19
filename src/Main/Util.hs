@@ -7,12 +7,13 @@ import Control.Exception.Base (IOException, catch)
 import Control.Monad (forM, unless, when)
 import Data.ByteString.Char8 qualified as C
 import GHC.IO.Exception (ExitCode (ExitSuccess))
-import System.Directory
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
-import System.FilePath (takeDirectory)
+import System.FilePath ((</>), takeDirectory)
 import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT, sigTERM)
-import System.Process (callCommand)
+import System.Posix.Files (createSymbolicLink)
+import System.Process (callCommand, readProcess)
 
 data MessageContainer
   = MessageContainer {interactive :: Bool, channel :: Stm.TChan String}
@@ -69,13 +70,13 @@ ensureDirExists dir =
         )
 
 createSymlink :: FilePath -> FilePath -> IO ()
-createSymlink from to =
+createSymlink target link =
   catch
-    (callCommand $ "ln -sf " <> from <> " " <> to)
+    (createSymbolicLink target link)
     ( \e ->
         let err = show (e :: IOException)
          in printInfo
-              ( "Couldn't create symlink from " <> from <> " to " <> to <> "; " <> err
+              ( "Couldn't create symlink from " <> target <> " to " <> link <> "; " <> err
               )
               False
     )
@@ -83,7 +84,7 @@ createSymlink from to =
 isMountpoint :: FilePath -> IO Bool
 isMountpoint path =
   catch
-    (callCommand ("mountpoint -q " <> path) >> return True)
+    (readProcess "mountpoint" ["-q", path] "" >> return True)
     ( \e ->
         let _ = show (e :: IOException)
          in return False
@@ -96,7 +97,7 @@ recursiveFileSearch rootDir fileName = do
   return (concat matches)
   where
     recSearch fp = do
-      let path = rootDir <> "/" <> fp
+      let path = rootDir </> fp
       pathIsDir <- doesDirectoryExist path
       if not pathIsDir
         && fileName == fp
@@ -164,7 +165,7 @@ acquireLock fp = do
 
 signKernel :: FilePath -> Int -> FilePath -> IO Bool
 signKernel bp dep target =
-  let kernelPath = bp <> "/" <> show dep <> target
+  let kernelPath = bp </> show dep <> target
    in pathExists kernelPath >>= \kernelExists ->
         ( if kernelExists
             then
@@ -177,7 +178,7 @@ signKernel bp dep target =
                     let _ = show (e :: IOException)
                      in return False
                 )
-            else error $ "Kernel for deployment " <> show dep <> " doesn't seem to exist."
+            else raiseSignal sigTERM >> error ("Kernel for deployment " <> show dep <> " doesn't seem to exist.")
         )
 
 genericRootfulPreproc :: FilePath -> Bool -> Bool -> IO MessageContainer

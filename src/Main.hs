@@ -9,7 +9,7 @@ import Main.Config qualified as Config
 import Main.Diff qualified as Diff
 import Main.Status qualified as Status
 import Main.Util qualified as Util
-import Options.Applicative
+import Options.Applicative (execParser)
 
 main :: IO ()
 main = assembleAction =<< execParser Cli.optsParser
@@ -24,7 +24,7 @@ assembleAction parser = do
           else config
       conf = Config.applyUserConfig config' userConf
   case Cli.optCommand parser of
-    Cli.Dep a b c d e f g h -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit g h
+    Cli.Dep a b c d e f g h i -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit g h i
     Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf inhibit
     Cli.Gc -> Asgc.deploymentGcAssemblyPre conf inhibit
     Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf inhibit

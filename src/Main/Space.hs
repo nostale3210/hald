@@ -5,27 +5,30 @@ import Control.Monad (when)
 import Data.List (sort)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
+import Main.Lock qualified as Lock
 import Main.Util qualified as Util
-import System.Directory
+import System.Directory (removePathForcibly)
+import System.FilePath ((</>))
 
 rmDep :: Dep.Deployment -> Config.Config -> IO ()
 rmDep deployment conf = do
   tbRmDep <- tbRmDep'
   currentDepId <- Dep.getCurrentDeploymentId (Config.rootDir conf)
   let bootComponents = Dep.bootComponents tbRmDep
-  bootPathNoComps <- Util.pathExists (Config.bootPath conf <> "/" <> show depId)
+  bootPathNoComps <- Util.pathExists (Config.bootPath conf </> show depId)
   let tbRmBootComponents =
         if bootPathNoComps
           then
             Dep.BootComponents
-              { Dep.bootDir = Just (Config.bootPath conf <> "/" <> show depId),
+              { Dep.bootDir = Just (Config.bootPath conf </> show depId),
                 Dep.bootEntry = Dep.bootEntry bootComponents,
                 Dep.ukiPath = Dep.ukiPath bootComponents
               }
           else
             bootComponents
   if Dep.identifier tbRmDep /= currentDepId
-    then
+    then do
+      Lock.clearRecursiveImmutable (Config.haldPath conf </> show depId)
       mapM_
         (uncurry (rmComponent depId conf))
         [ ("root dir", Dep.rootDir tbRmDep),
@@ -84,20 +87,20 @@ checkDep depId conf = do
   bootEntryExists <- componentPresent $ Dep.bootEntry bootComps
   ukiExists <- componentPresent $ Dep.ukiPath bootComps
   lockfileExists <- componentPresent $ Dep.lockfile dep
-  idFileExists <- Util.pathExists $ Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep"
+  idFileExists <- Util.pathExists $ Config.haldPath conf </> show depId <> "/usr/.ald_dep"
   if rootDirExists
     && (bootDirExists || ukiExists)
     && (bootEntryExists || ukiExists)
     && lockfileExists
     && idFileExists
     then do
-      idFileContent <- readFile $ Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep"
-      let savedId = read (head $ lines idFileContent) :: Int
+      idFileContent <- readFile $ Config.haldPath conf </> show depId <> "/usr/.ald_dep"
+      let savedId = case reads (head $ lines idFileContent) of [(n, "")] -> n; _ -> 0
       when
         (savedId /= depId)
         $ catch
           ( writeFile
-              (Config.haldPath conf <> "/" <> show depId <> "/usr/.ald_dep")
+              (Config.haldPath conf </> show depId <> "/usr/.ald_dep")
               (show depId)
           )
           ( \e ->

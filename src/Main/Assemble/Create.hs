@@ -4,6 +4,7 @@ import Control.Monad (unless, when)
 import Data.Maybe (isNothing)
 import Main.Assemble.Activate qualified as Asac
 import Main.Assemble.Gc qualified as Asgc
+import Main.CAS.GC qualified as CasGc
 import Main.Config qualified as Config
 import Main.Container qualified as Container
 import Main.Create qualified as Create
@@ -12,15 +13,16 @@ import Main.Fail qualified as Fail
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import Main.Util qualified as Util
+import System.FilePath ((</>))
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> Bool -> IO ()
-deploymentCreationAssemblyPre act build keep gc up se conf inhibit sb uki = do
+deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> Bool -> Bool -> IO ()
+deploymentCreationAssemblyPre act build keep gc up se conf inhibit sb uki cas = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
-  deploymentCreationAssembly act build keep gc up se conf msgCont sb uki
+  deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas
 
-deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> Bool -> Bool -> IO ()
-deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
+deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> Bool -> Bool -> Bool -> IO ()
+deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
   updated <-
     if up
       then do
@@ -29,7 +31,8 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
       else return True
 
   existingDeps <- Dep.getDeploymentsInt conf
-  let newDep = Dep.createDeployment existingDeps conf
+  let backend = if cas then Dep.Cas else Dep.Hardlink
+      newDep = Dep.createDeployment existingDeps conf backend
 
   Fail.installGenericHandler [sigINT, sigTERM] conf (Just newDep)
 
@@ -55,7 +58,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
             else conf
     containerMount <- Container.mountContainer "ald-root" $ Config.containerUri pbConf
 
-    Create.createSkeleton (Dep.identifier newDep) pbConf uki
+    Create.createSkeleton (Dep.identifier newDep) pbConf uki backend
 
     Util.printProgress msgCont "Syncing deployment usr..."
     Create.syncDeploymentUsr containerMount pbConf newDep linkSource
@@ -87,7 +90,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
     when se $ do
       Util.printProgress msgCont ("Relabeling deployment " <> show (Dep.identifier newDep) <> "...")
       Util.relabelSeLinuxPath
-        (Config.haldPath pbConf <> "/" <> show (Dep.identifier newDep))
+        (Config.haldPath pbConf </> show (Dep.identifier newDep))
         "/etc/selinux/targeted/contexts/files/file_contexts"
         (Config.bootPath pbConf)
 
@@ -108,4 +111,5 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki = do
 
     when gc $ Asgc.deploymentGcAssembly pbConf msgCont
 
+    CasGc.restoreStoreFlags pbConf
     Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath pbConf

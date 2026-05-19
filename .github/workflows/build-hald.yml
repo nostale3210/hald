@@ -72,6 +72,7 @@ jobs:
             --mount type=bind,src=./Containerfile,dst=/Containerfile \
             --mount type=bind,src=cosign.pub,dst=/cosign.pub \
             --mount type=bind,src=hald.cabal,dst=/hald.cabal \
+            --mount type=bind,src=cabal.project,dst=/cabal.project \
             --mount type=bind,src=CHANGELOG.md,dst=/CHANGELOG.md \
             --mount type=bind,src=LICENSE,dst=/LICENSE \
             --mount type=bind,src=src,dst=/src \
