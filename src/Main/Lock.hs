@@ -22,9 +22,6 @@ fsIocSetflags =
 fsImmutableFl :: CInt
 fsImmutableFl = 0x00000010
 
-fsAppendFl :: CInt
-fsAppendFl = 0x00000020
-
 foreign import ccall unsafe "fcntl.h open"
   c_open :: CString -> CInt -> IO CInt
 
@@ -72,18 +69,6 @@ setImmutable fp =
 
 setMutable :: FilePath -> IO ()
 setMutable fp =
-  catch
-    (setFileFlag fp 0)
-    (\e -> let _ = show (e :: IOException) in return ())
-
-setAppendOnly :: FilePath -> IO ()
-setAppendOnly fp =
-  catch
-    (setFileFlag fp fsAppendFl)
-    (\e -> let _ = show (e :: IOException) in return ())
-
-removeAppendOnly :: FilePath -> IO ()
-removeAppendOnly fp =
   catch
     (setFileFlag fp 0)
     (\e -> let _ = show (e :: IOException) in return ())

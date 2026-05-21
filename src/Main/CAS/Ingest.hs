@@ -65,7 +65,7 @@ doHash srcPath casDir = do
       destDir = casDir </> prefix
       destPath = destDir </> hashStr
   createDirectoryIfMissing True destDir
-  Lock.setAppendOnly destDir
+  Lock.setMutable destDir
   destExists <- doesFileExist destPath
   unless destExists $ do
     catch

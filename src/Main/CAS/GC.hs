@@ -20,7 +20,7 @@ restoreStoreFlags conf = do
     forM_ prefixes $ \p -> do
       let casPath = casDir </> p
       pExists <- doesDirectoryExist casPath
-      when pExists $ Lock.setAppendOnly casPath
+      when pExists $ Lock.setImmutable casPath
       objects <- listDirectory casPath
       mapConcurrently_
         ( \f -> do
@@ -40,7 +40,7 @@ collectGarbage conf keptDepIds = do
   forM_ hexPrefixes $ \p -> do
     let pPath = casDir </> p
     pExists <- doesDirectoryExist pPath
-    when pExists $ Lock.removeAppendOnly pPath
+    when pExists $ Lock.setMutable pPath
   casFiles <- concat <$> mapConcurrently
     (\p -> map (\f -> casDir </> p </> f) <$> listDirectory (casDir </> p))
     hexPrefixes
