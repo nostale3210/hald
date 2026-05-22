@@ -89,6 +89,9 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
 
     when se $ do
       Util.printProgress msgCont ("Relabeling deployment " <> show (Dep.identifier newDep) <> "...")
+      when cas $
+        Lock.clearRecursiveImmutable $
+          Config.haldPath pbConf </> show (Dep.identifier newDep) </> "usr"
       Util.relabelSeLinuxPath
         (Config.haldPath pbConf </> show (Dep.identifier newDep))
         "/etc/selinux/targeted/contexts/files/file_contexts"
