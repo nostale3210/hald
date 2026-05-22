@@ -52,11 +52,12 @@ buildIndex rootDir currentDir = do
               return $ Map.singleton relPath (TreeFile "")
 
 resolveEntries :: FilePath -> FilePath -> AssetMap -> IO AssetMap
-resolveEntries srcDir casDir = Map.traverseWithKey resolveRef
+resolveEntries srcDir casDir =
+  fmap Map.fromList . pooledMapConcurrently resolveEntry . Map.toList
   where
-    resolveRef relPath entry = case entry of
-      TreeFile "" -> TreeFile <$> doHash (srcDir </> relPath) casDir
-      _ -> return entry
+    resolveEntry (relPath, entry) = case entry of
+      TreeFile "" -> (relPath,) . TreeFile <$> doHash (srcDir </> relPath) casDir
+      _ -> return (relPath, entry)
 
 doHash :: FilePath -> FilePath -> IO FilePath
 doHash srcPath casDir = do
