@@ -8,11 +8,12 @@ import Main.CAS.Ingest qualified as CAS
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
-import System.Directory (copyFile, removeFile)
+import System.Directory (copyFile, doesDirectoryExist, removeFile)
 import System.FilePath (takeDirectory, (</>))
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand)
-import UnliftIO.Async (concurrently)
+import UnliftIO.Async (concurrently, pooledForConcurrentlyN_)
+import UnliftIO.Concurrent (getNumCapabilities)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
 createSkeleton depId conf uki backend =
@@ -151,7 +152,7 @@ syncMinimumState depPath =
 
 syncState :: Config.Config -> FilePath -> IO ()
 syncState conf depPath =
-  let syncCmd = "rsync -aRI \"$@\" " <> depPath <> " >/dev/null 2>&1 || :"
+  let syncCmd = "cp --parents -a \"$@\" " <> depPath <> " >/dev/null 2>&1 || :"
       xargsSync = "xargs -n1 -P\"$(($(nproc --all)/2))\" bash -c '" <> syncCmd <> "' _"
    in catch
         ( callCommand
@@ -175,27 +176,27 @@ syncState conf depPath =
 syncSingleFile :: [FilePath] -> FilePath -> IO ()
 syncSingleFile files destination
   | null files = return ()
-  | otherwise =
-      mapM_
-        ( \y ->
-            catch
-              ( callCommand
-                  ( "rsync -aRI  "
-                      <> y
-                      <> " "
-                      <> destination
-                  )
+  | otherwise = do
+      threads <- getNumCapabilities
+      let workThreads = max 1 $ div threads 2
+      destExists <- doesDirectoryExist destination
+      when destExists $ pooledForConcurrentlyN_ workThreads files $ \p ->
+        catch
+          ( callCommand
+              ( "cp --parents -a  "
+                  <> p
+                  <> " "
+                  <> destination
               )
-              ( \e ->
-                  let _ = show (e :: IOException)
-                   in Util.printInfo
-                        ( "Some required files couldn't be synchronized.\n"
-                            <> "Manual intervention might be necessary"
-                        )
-                        False
-              )
-        )
-        files
+          )
+          ( \e ->
+              let _ = show (e :: IOException)
+               in Util.printInfo
+                    ( "Some required files couldn't be synchronized.\n"
+                        <> "Manual intervention might be necessary"
+                    )
+                    False
+          )
 
 syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
 syncDeploymentUsr containerMount conf dep linkSource =
