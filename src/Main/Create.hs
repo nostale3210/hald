@@ -1,6 +1,5 @@
 module Main.Create where
 
-import Control.Concurrent.Async (concurrently)
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (nubBy)
@@ -10,9 +9,10 @@ import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.Directory (copyFile, removeFile)
-import System.FilePath ((</>), takeDirectory)
+import System.FilePath (takeDirectory, (</>))
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand)
+import UnliftIO.Async (concurrently)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
 createSkeleton depId conf uki backend =

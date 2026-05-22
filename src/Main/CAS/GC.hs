@@ -1,8 +1,7 @@
 module Main.CAS.GC (collectGarbage, restoreStoreFlags) where
 
-import Control.Concurrent.Async (mapConcurrently, mapConcurrently_)
 import Control.Exception (IOException, catch)
-import Control.Monad (forM_, unless, when)
+import Control.Monad (unless, when)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Lock qualified as Lock
@@ -10,54 +9,51 @@ import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, pathI
 import System.FilePath ((</>))
 import System.Posix.Files (FileStatus, deviceID, fileID, getSymbolicLinkStatus)
 import System.Posix.Types (DeviceID, FileID)
+import UnliftIO.Async (mapConcurrently, pooledForConcurrentlyN, pooledForConcurrentlyN_)
+import UnliftIO.Concurrent (getNumCapabilities)
 
 restoreStoreFlags :: Config.Config -> IO ()
 restoreStoreFlags conf = do
+  threads <- getNumCapabilities
   let casDir = Config.haldPath conf </> "objects"
+      workThreads = max 1 $ div threads 2
   dirExists <- doesDirectoryExist casDir
   when dirExists $ do
     prefixes <- listDirectory casDir
-    forM_ prefixes $ \p -> do
+    pooledForConcurrentlyN_ 2 prefixes $ \p -> do
       let casPath = casDir </> p
       pExists <- doesDirectoryExist casPath
       when pExists $ Lock.setImmutable casPath
       objects <- listDirectory casPath
-      mapConcurrently_
-        ( \f -> do
-            let casFile = casPath </> f
-            fExists <- doesFileExist casFile
-            when fExists $ Lock.setImmutable casFile
-        )
-        objects
+      pooledForConcurrentlyN_ workThreads objects $ \o -> do
+        let casObj = casPath </> o
+        oExists <- doesFileExist casObj
+        when oExists $ Lock.setImmutable casObj
 
 collectGarbage :: Config.Config -> [Int] -> IO ()
 collectGarbage conf keptDepIds = do
-  let hp = Config.haldPath conf
-      casDir = hp </> "objects"
-  referenced <- concat <$> mapConcurrently (`walkDeployment` hp) keptDepIds
+  threads <- getNumCapabilities
+  let casDir = Config.haldPath conf </> "objects"
+      workThreads = max 1 $ div threads 2
+  referenced <- concat <$> mapConcurrently (`walkDeployment` Config.haldPath conf) keptDepIds
   let refSet = Set.fromList referenced
-  hexPrefixes <- filter (\d -> length d == 2 && all (`elem` "0123456789abcdef") d) <$> listDirectory casDir
-  forM_ hexPrefixes $ \p -> do
-    let pPath = casDir </> p
-    pExists <- doesDirectoryExist pPath
-    when pExists $ Lock.setMutable pPath
-  casFiles <- concat <$> mapConcurrently
-    (\p -> map (\f -> casDir </> p </> f) <$> listDirectory (casDir </> p))
-    hexPrefixes
-  mapConcurrently_
-    ( \casPath -> do
-        mStat <- tryStat casPath
+  dirExists <- doesDirectoryExist casDir
+  when dirExists $ do
+    prefixes <- listDirectory casDir
+    pooledForConcurrentlyN_ 2 prefixes $ \p -> do
+      let casPath = casDir </> p
+      objects <- listDirectory casPath
+      pooledForConcurrentlyN_ workThreads objects $ \o -> do
+        mStat <- tryStat o
         case mStat of
           Just stat -> do
             let ino = (deviceID stat, fileID stat)
             unless (ino `Set.member` refSet) $ do
-              Lock.setMutable casPath
+              Lock.setMutable o
               catch
-                (removeFile casPath)
+                (removeFile o)
                 (\e -> let _ = show (e :: IOException) in return ())
           Nothing -> return ()
-    )
-    casFiles
   removeEmptyDirectories casDir
   restoreStoreFlags conf
 
@@ -70,7 +66,7 @@ walkDeployment depId hp = do
 walkTree :: FilePath -> IO [(DeviceID, FileID)]
 walkTree dir = do
   contents <- listDirectory dir
-  results <- mapM (processEntry dir) contents
+  results <- pooledForConcurrentlyN 2 contents $ processEntry dir
   return $ concat results
   where
     processEntry parent name = do
@@ -99,7 +95,7 @@ removeEmptyDirectories dir = do
   dirExists <- doesDirectoryExist dir
   when dirExists $ do
     contents <- listDirectory dir
-    forM_ contents $ \name -> do
+    pooledForConcurrentlyN_ 2 contents $ \name -> do
       let subPath = dir </> name
       isDir <- doesDirectoryExist subPath
       when isDir $ removeEmptyDirectories subPath

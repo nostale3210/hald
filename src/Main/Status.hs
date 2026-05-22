@@ -1,13 +1,13 @@
 module Main.Status where
 
-import Control.Concurrent.Async (mapConcurrently)
 import Control.Exception (IOException, catch)
 import Data.List (isPrefixOf, sort)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.Directory (listDirectory)
-import System.FilePath ((</>), takeBaseName, takeDirectory)
+import System.FilePath (takeBaseName, takeDirectory, (</>))
+import UnliftIO.Async (forConcurrently)
 
 data DepStatus
   = DepStatus
@@ -65,14 +65,11 @@ printDepStati conf = do
   allDeps <- Dep.getDeploymentsInt conf
   let sortedDeps = sort allDeps
   depList <-
-    mapConcurrently
-      ( \dep ->
-          Dep.getDeployment dep conf >>= \fullDep ->
-            getDepStatus
-              conf
-              fullDep
-      )
-      sortedDeps
+    forConcurrently sortedDeps $ \dep ->
+      Dep.getDeployment dep conf >>= \fullDep ->
+        getDepStatus
+          conf
+          fullDep
   putStrLn "Currently retained deployments:"
   printDep (reverse depList) conf
 

@@ -6,7 +6,6 @@ module Main.CAS.Ingest
   )
 where
 
-import Control.Concurrent.Async (mapConcurrently_)
 import Control.Exception (IOException, catch)
 import Control.Monad (unless)
 import Data.Map.Strict qualified as Map
@@ -15,6 +14,7 @@ import Main.Lock qualified as Lock
 import System.Directory (copyFile, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory, pathIsSymbolicLink)
 import System.FilePath (takeDirectory, (</>))
 import System.Posix.Files (createLink, createSymbolicLink, readSymbolicLink)
+import UnliftIO.Async
 
 data TreeEntry
   = TreeDir
@@ -31,7 +31,7 @@ ingestPath srcDir casDir = do
 buildIndex :: FilePath -> FilePath -> IO (Map.Map FilePath TreeEntry)
 buildIndex rootDir currentDir = do
   contents <- listDirectory currentDir
-  entries <- mapM process contents
+  entries <- pooledMapConcurrentlyN 2 process contents
   return $ Map.unions entries
   where
     process name = do
@@ -77,10 +77,10 @@ doHash srcPath casDir = do
 deployTree :: FilePath -> AssetMap -> IO ()
 deployTree targetRoot assetMap = do
   let casPaths = [p | TreeFile p <- Map.elems assetMap]
-  mapConcurrently_ Lock.setMutable casPaths
+  pooledMapConcurrently_ Lock.setMutable casPaths
   createDirectoryIfMissing True targetRoot
-  mapConcurrently_ (deployEntry targetRoot) (Map.toList assetMap)
-  mapConcurrently_ Lock.setImmutable casPaths
+  pooledMapConcurrently_ (deployEntry targetRoot) (Map.toList assetMap)
+  pooledMapConcurrently_ Lock.setImmutable casPaths
 
 makeRelative :: FilePath -> FilePath -> FilePath
 makeRelative root path =
@@ -103,7 +103,7 @@ deployEntry targetRoot (relPath, entry) = case entry of
     createSymbolicLink target (targetRoot </> relPath)
   TreeFile casPath -> do
     let targetPath = targetRoot </> relPath
-    createDirectoryIfMissing True (takeDirectory targetPath)
     targetExists <- doesFileExist targetPath
-    unless targetExists $
+    unless targetExists $ do
+      createDirectoryIfMissing True (takeDirectory targetPath)
       createLink casPath targetPath

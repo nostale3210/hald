@@ -16,6 +16,7 @@ main = assembleAction =<< execParser Cli.optsParser
 
 assembleAction :: Cli.GlobalOpts -> IO ()
 assembleAction parser = do
+  Util.setSystemThreads
   userConf <- Config.getUserConfig config
   interactive <- Util.checkInteractive
   let config' =

@@ -2,7 +2,6 @@
 
 module Main.Diff where
 
-import Control.Concurrent.Async (concurrently)
 import Control.Exception (IOException, catch)
 import Data.List (sortBy)
 import Data.Maybe qualified
@@ -12,6 +11,7 @@ import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.IO (hClose, openTempFile)
 import System.Process (readProcess)
+import UnliftIO.Async (concurrently)
 
 selectDeployment :: [Int] -> [Int] -> Int
 selectDeployment allDeps selected =

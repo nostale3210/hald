@@ -41,7 +41,6 @@ executable hald
         Main.Util
     -- other-extensions:
     build-depends:
-        async,
         base,
         blake3,
         bytestring,
@@ -53,7 +52,8 @@ executable hald
         process,
         stm,
         text,
-        unix
+        unix,
+        unliftio
     hs-source-dirs:   src
     default-language: GHC2021
     ghc-options: -static -O2 -optl-static -optl-pthread -threaded

@@ -10,7 +10,7 @@ import GHC.IO.Exception (ExitCode (ExitSuccess))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
-import System.FilePath ((</>), takeDirectory)
+import System.FilePath (takeDirectory, (</>))
 import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (createSymbolicLink)
 import System.Process (callCommand, readProcess)
@@ -238,6 +238,15 @@ execWithSystemdInhibit =
             let _ = show (e :: IOException)
              in raiseSignal sigINT
         )
+
+setSystemThreads :: IO ()
+setSystemThreads = do
+  nproc <-
+    catch
+      (readProcess "nproc" [] "")
+      (\e -> let _ = (e :: IOException) in return "1")
+  let threads = read nproc :: Int
+  Conc.setNumCapabilities threads
 
 printProgress :: MessageContainer -> String -> IO ()
 printProgress msgCont status =
