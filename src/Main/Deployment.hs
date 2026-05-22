@@ -114,7 +114,7 @@ getDeployment depId conf = do
       then
         readFile markerFile >>= \content ->
           case listToMaybe (lines content) of
-            Just "cas" -> return Cas
+            Just "Cas" -> return Cas
             _ -> return Hardlink
       else return Hardlink
   bComponents <- getBootComponents depId conf

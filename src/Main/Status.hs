@@ -14,7 +14,8 @@ data DepStatus
   { identifier :: Int,
     name :: String,
     version :: String,
-    kernel :: String
+    kernel :: String,
+    backend :: String
   }
   deriving (Show)
 
@@ -43,7 +44,8 @@ getDepStatus conf dep = do
       { identifier = Dep.identifier dep,
         name = returnOsField "NAME" osReleaseLines,
         version = returnOsField "VERSION" osReleaseLines,
-        kernel = kernelVer
+        kernel = kernelVer,
+        backend = show $ Dep.backend dep
       }
 
 returnOsField :: String -> [String] -> String
@@ -94,6 +96,8 @@ printDep deps conf =
             <> fourspaces ("Version: " <> version x)
             <> "\n"
             <> fourspaces ("Kernel: " <> kernel x)
+            <> "\n"
+            <> fourspaces ("Backend: " <> backend x)
         )
       printDep xs conf
       where
