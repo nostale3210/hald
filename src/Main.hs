@@ -16,7 +16,6 @@ main = assembleAction =<< execParser Cli.optsParser
 
 assembleAction :: Cli.GlobalOpts -> IO ()
 assembleAction parser = do
-  Util.setSystemThreads
   userConf <- Config.getUserConfig config
   interactive <- Util.checkInteractive
   let config' =
@@ -24,6 +23,7 @@ assembleAction parser = do
           then Config.applyConfigKey config ["interactive", show interactive]
           else config
       conf = Config.applyUserConfig config' userConf
+  Util.setSystemThreads (Config.maxThreads conf)
   case Cli.optCommand parser of
     Cli.Dep a b c d e f g h i -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit g h i
     Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf inhibit

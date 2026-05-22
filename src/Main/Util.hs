@@ -239,14 +239,14 @@ execWithSystemdInhibit =
              in raiseSignal sigINT
         )
 
-setSystemThreads :: IO ()
-setSystemThreads = do
+setSystemThreads :: Int -> IO ()
+setSystemThreads maxThreads = do
   nproc <-
     catch
       (readProcess "nproc" [] "")
       (\e -> let _ = (e :: IOException) in return "1")
   let threads = read nproc :: Int
-  Conc.setNumCapabilities threads
+  Conc.setNumCapabilities $ min threads maxThreads
 
 printProgress :: MessageContainer -> String -> IO ()
 printProgress msgCont status =

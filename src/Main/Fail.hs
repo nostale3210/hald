@@ -10,8 +10,8 @@ import Main.Container qualified as Container
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
-import System.Posix.Signals (Handler (..), Signal, SignalInfo (siginfoSignal), installHandler, signalProcess)
 import System.FilePath ((</>))
+import System.Posix.Signals (Handler (..), Signal, SignalInfo (siginfoSignal), installHandler, signalProcess)
 import System.Process (Pid, callCommand, getCurrentPid)
 
 failAndCleanup :: Dep.Deployment -> Config.Config -> IO ()

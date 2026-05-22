@@ -14,7 +14,7 @@ import Main.Lock qualified as Lock
 import System.Directory (copyFile, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory, pathIsSymbolicLink)
 import System.FilePath (takeDirectory, (</>))
 import System.Posix.Files (createLink, createSymbolicLink, readSymbolicLink)
-import UnliftIO.Async
+import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrentlyN, pooledMapConcurrently_)
 
 data TreeEntry
   = TreeDir

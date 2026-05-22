@@ -25,7 +25,8 @@ data Config
     rootDir :: FilePath,
     interactive :: Bool,
     packageManager :: PackageManager,
-    packageDB :: Maybe FilePath
+    packageDB :: Maybe FilePath,
+    maxThreads :: Int
   }
 
 defaultConfig :: Config
@@ -43,7 +44,8 @@ defaultConfig =
       rootDir = "",
       interactive = False,
       packageManager = Unknown,
-      packageDB = Nothing
+      packageDB = Nothing,
+      maxThreads = 9999
     }
 
 getUserConfig :: Config -> IO String
@@ -106,6 +108,7 @@ updateSingleKey conf key val =
     "interactive" -> conf {interactive = case reads val of [(b, "")] -> b; _ -> interactive conf}
     "packageManager" -> conf {packageManager = selectPm val}
     "packageDB" -> conf {packageDB = Just val}
+    "maxThreads" -> conf {maxThreads = case reads val of [(n, "")] -> n; _ -> maxThreads conf}
     _ -> conf
 
 selectPm :: String -> PackageManager
