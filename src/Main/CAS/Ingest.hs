@@ -8,7 +8,7 @@ where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (unless)
-import Data.Map.Strict qualified as Map
+import Data.HashMap.Strict qualified as HashMap
 import Main.CAS.Hash qualified as Hash
 import Main.Lock qualified as Lock
 import System.Directory (copyFile, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory, pathIsSymbolicLink)
@@ -21,18 +21,18 @@ data TreeEntry
   | TreeSymlink FilePath
   | TreeFile FilePath
 
-type AssetMap = Map.Map FilePath TreeEntry
+type AssetMap = HashMap.HashMap FilePath TreeEntry
 
 ingestPath :: FilePath -> FilePath -> IO AssetMap
 ingestPath srcDir casDir = do
   entries <- buildIndex srcDir srcDir
   resolveEntries srcDir casDir entries
 
-buildIndex :: FilePath -> FilePath -> IO (Map.Map FilePath TreeEntry)
+buildIndex :: FilePath -> FilePath -> IO AssetMap
 buildIndex rootDir currentDir = do
   contents <- listDirectory currentDir
   entries <- pooledMapConcurrentlyN 2 process contents
-  return $ Map.unions entries
+  return $ HashMap.unions entries
   where
     process name = do
       let fullPath = currentDir </> name
@@ -42,18 +42,18 @@ buildIndex rootDir currentDir = do
       if isDir && not isLink
         then do
           sub <- buildIndex rootDir fullPath
-          return $ Map.insert relPath TreeDir sub
+          return $ HashMap.insert relPath TreeDir sub
         else
           if isLink
             then do
               target <- readSymbolicLink fullPath
-              return $ Map.singleton relPath (TreeSymlink target)
+              return $ HashMap.singleton relPath (TreeSymlink target)
             else
-              return $ Map.singleton relPath (TreeFile "")
+              return $ HashMap.singleton relPath (TreeFile "")
 
 resolveEntries :: FilePath -> FilePath -> AssetMap -> IO AssetMap
 resolveEntries srcDir casDir =
-  fmap Map.fromList . pooledMapConcurrently resolveEntry . Map.toList
+  fmap HashMap.fromList . pooledMapConcurrently resolveEntry . HashMap.toList
   where
     resolveEntry (relPath, entry) = case entry of
       TreeFile "" -> (relPath,) . TreeFile <$> doHash (srcDir </> relPath) casDir
@@ -77,10 +77,10 @@ doHash srcPath casDir = do
 
 deployTree :: FilePath -> AssetMap -> IO ()
 deployTree targetRoot assetMap = do
-  let casPaths = [p | TreeFile p <- Map.elems assetMap]
+  let casPaths = [p | TreeFile p <- HashMap.elems assetMap]
   pooledMapConcurrently_ Lock.setMutable casPaths
   createDirectoryIfMissing True targetRoot
-  pooledMapConcurrently_ (deployEntry targetRoot) (Map.toList assetMap)
+  pooledMapConcurrently_ (deployEntry targetRoot) (HashMap.toList assetMap)
   pooledMapConcurrently_ Lock.setImmutable casPaths
 
 makeRelative :: FilePath -> FilePath -> FilePath
