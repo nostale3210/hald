@@ -1,5 +1,6 @@
 module Main.Assemble.Remove where
 
+import Control.Exception (onException)
 import Main.CAS.GC qualified as CasGc
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
@@ -21,13 +22,13 @@ deploymentErasureAssemblyPre depId conf inhibit =
 deploymentErasureAssembly :: Int -> Config.Config -> Util.MessageContainer -> IO ()
 deploymentErasureAssembly depId conf msgCont = do
   tbRmDep <- Dep.getDeployment depId conf
-  Fail.installGenericHandler [sigINT, sigTERM] conf (Just tbRmDep)
-
-  Util.printInfo
-    ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
-    (Config.interactive conf)
-  Util.printProgress msgCont ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
-  Lock.umountDirForcibly Lock.Rfl $ Config.haldPath conf
-  Space.rmDep tbRmDep conf
-  CasGc.restoreStoreFlags conf
-  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
+  Fail.installAsyncHandler [sigINT, sigTERM]
+  flip onException (Fail.cleanupOnError conf (Just tbRmDep)) $ do
+    Util.printInfo
+      ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
+      (Config.interactive conf)
+    Util.printProgress msgCont ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
+    Lock.umountDirForcibly Lock.Rfl $ Config.haldPath conf
+    Space.rmDep tbRmDep conf
+    CasGc.restoreStoreFlags conf
+    Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

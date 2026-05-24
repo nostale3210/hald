@@ -10,10 +10,11 @@ import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.Directory (copyFile, doesDirectoryExist, removeFile)
 import System.FilePath (takeDirectory, (</>))
+import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand)
 import UnliftIO.Async (concurrently, pooledForConcurrentlyN_)
-import UnliftIO.Concurrent (getNumCapabilities)
+import UnliftIO.Concurrent (getNumCapabilities, threadDelay)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
 createSkeleton depId conf uki backend =
@@ -37,8 +38,9 @@ createBootEntry depId conf = do
           )
           ( \e ->
               let err = show (e :: IOException)
-               in putStrLn err
+               in hPutStrLn stderr err
                     >> raiseSignal sigTERM
+                    >> threadDelay maxBound
                     >> return ""
           )
       catch
@@ -48,16 +50,14 @@ createBootEntry depId conf = do
         )
         ( \e ->
             let err = show (e :: IOException)
-             in Util.printInfo ("Couldn't create boot entry!\n" <> err) (Config.interactive conf)
+             in hPutStrLn stderr ("Couldn't create boot entry!\n" <> err)
                   >> raiseSignal sigTERM
+                  >> threadDelay maxBound
         )
     else
-      raiseSignal sigTERM
-        >> error
-          ( "No boot entry template found, make sure it exists at "
-              <> Config.configPath conf
-              <> "/boot.conf"
-          )
+      hPutStrLn stderr ("No boot entry template found, make sure it exists at " <> Config.configPath conf <> "/boot.conf")
+        >> raiseSignal sigTERM
+        >> threadDelay maxBound
 
 generateBootEntry :: Int -> String -> String
 generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
@@ -81,8 +81,9 @@ syncSystemConfig dropState conf dep = do
     )
     ( \e ->
         let err = show (e :: IOException)
-         in Util.printInfo ("Couldn't sync system config!\n" <> err) (Config.interactive conf)
+         in hPutStrLn stderr ("Couldn't sync system config!\n" <> err)
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
   mergeFiles "/etc/passwd" (depPath <> "/.tmp.passwd") (depPath <> "/etc/passwd")
     >> removeTmpFile (depPath <> "/.tmp.passwd")
@@ -110,8 +111,9 @@ mergeFiles inputA inputB outputFile = do
       (readFile inputA)
       ( \e ->
           let _ = show (e :: IOException)
-           in Util.printInfo "Failed to merge files!" False
+           in hPutStrLn stderr "Failed to merge files!"
                 >> raiseSignal sigTERM
+                >> threadDelay maxBound
                 >> return ""
       )
   contentB <-
@@ -119,8 +121,9 @@ mergeFiles inputA inputB outputFile = do
       (readFile inputB)
       ( \e ->
           let _ = show (e :: IOException)
-           in Util.printInfo "Failed to merge files!" False
+           in hPutStrLn stderr "Failed to merge files!"
                 >> raiseSignal sigTERM
+                >> threadDelay maxBound
                 >> return ""
       )
   let output =
@@ -132,8 +135,9 @@ mergeFiles inputA inputB outputFile = do
     (writeFile outputFile output)
     ( \e ->
         let _ = show (e :: IOException)
-         in Util.printInfo "Failed to merge files!" False
+         in hPutStrLn stderr "Failed to merge files!"
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
 
 syncMinimumState :: FilePath -> IO ()
@@ -168,8 +172,9 @@ syncState conf depPath =
         )
         ( \e ->
             let err = show (e :: IOException)
-             in putStrLn err
+             in hPutStrLn stderr err
                   >> raiseSignal sigTERM
+                  >> threadDelay maxBound
         )
         >> syncMinimumState depPath
 
@@ -213,10 +218,10 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
       rsyncCmd = case linkSource of
         Just src -> rsyncBase <> " --link-dest=../../" <> show src <> "/usr"
         Nothing -> rsyncBase
-  catch (callCommand rsyncCmd) (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+  catch (callCommand rsyncCmd) (\e -> hPutStrLn stderr ("Syncing deployment /usr failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
   catch
     (writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep)))
-    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+    (\e -> hPutStrLn stderr ("Writing deployment marker failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
 
 syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentUsrCas containerMount conf dep = do
@@ -232,7 +237,7 @@ syncDeploymentUsrCas containerMount conf dep = do
         (depPath <> "/usr/.ald_dep")
         (show (Dep.identifier dep))
     )
-    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+    (\e -> hPutStrLn stderr ("Writing deployment marker failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
 
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
@@ -246,7 +251,7 @@ syncDeploymentEtc containerMount conf dep = do
             <> "/etc/"
         )
     )
-    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+    (\e -> hPutStrLn stderr ("Syncing deployment /etc failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
 normalizeDepEtcTimestamps conf dep = do
@@ -259,7 +264,7 @@ normalizeDepEtcTimestamps conf dep = do
             <> "-execdir sh -c \"touch -d 1970-01-01T01:00:00 '{}' >/dev/null 2>&1 || :\" \\;"
         )
     )
-    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+    (\e -> hPutStrLn stderr ("Normalizing /etc timestamps failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
 
 copyContainerFiles :: Config.Config -> Dep.Deployment -> IO ()
 copyContainerFiles conf dep = do
@@ -278,7 +283,7 @@ copyContainerFiles conf dep = do
         let _ = show (e :: IOException)
          in catch
               (writeFile (hp <> "/." <> show depId) "")
-              (\e2 -> let _ = show (e2 :: IOException) in raiseSignal sigTERM)
+              (\e2 -> let _ = (e2 :: IOException) in raiseSignal sigTERM >> threadDelay maxBound)
     )
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
@@ -293,8 +298,10 @@ modulePathSearch conf deployment target = do
       target
   case paths of
     [] -> do
+      hPutStrLn stderr ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment))
       raiseSignal sigTERM
-      error $ "No " <> target <> " found in deployment " <> show (Dep.identifier deployment)
+      threadDelay maxBound
+      return ""
     x : _ -> return x
 
 placeBootFiles :: Config.Config -> Dep.Deployment -> IO ()
@@ -308,7 +315,10 @@ placeBootFiles conf deployment = do
     Just x -> do
       copyFile kernel (x <> "/vmlinuz")
       copyFile initrd (x <> "/initramfs.img")
-    Nothing -> raiseSignal sigTERM
+    Nothing -> do
+      hPutStrLn stderr ("No boot directory supplied for deployment " <> show (Dep.identifier deployment))
+      raiseSignal sigTERM
+      threadDelay maxBound
 
 installUki :: Config.Config -> Dep.Deployment -> IO ()
 installUki conf deployment = do
@@ -323,8 +333,9 @@ installUki conf deployment = do
       )
       ( \e ->
           let err = show (e :: IOException)
-           in putStrLn err
+           in hPutStrLn stderr err
                 >> raiseSignal sigTERM
+                >> threadDelay maxBound
                 >> return ""
       )
   let cmdline =
@@ -350,9 +361,12 @@ installUki conf deployment = do
                 <> " >/dev/null 2>&1"
             )
         )
-        ( \e -> let _ = show (e :: IOException) in raiseSignal sigTERM
+        ( \e -> hPutStrLn stderr ("ukify build failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound
         )
-    Nothing -> raiseSignal sigTERM
+    Nothing -> do
+      hPutStrLn stderr ("No UKI path supplied for deployment " <> show (Dep.identifier deployment))
+      raiseSignal sigTERM
+      threadDelay maxBound
 
 getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 getPackageDB containerPath conf dep =
@@ -377,8 +391,9 @@ getPackageDB containerPath conf dep =
     )
     ( \e ->
         let _ = show (e :: IOException)
-         in putStrLn "Failed fetching package db!"
+         in hPutStrLn stderr "Failed fetching package db!"
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
 
 setDefaultBootEntry :: Int -> IO ()

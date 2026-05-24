@@ -1,17 +1,23 @@
 module Main.Activate where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Util qualified as Util
+import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (addSignal, blockSignals, emptySignalSet, raiseSignal, sigINT, sigTERM, unblockSignals)
 import System.Process (callCommand)
 
 getNewRoot :: Dep.Deployment -> IO FilePath
 getNewRoot nextDep =
   case Dep.rootDir nextDep of
-    Nothing -> raiseSignal sigTERM >> return "Defective"
+    Nothing ->
+      hPutStrLn stderr "nextDep doesn't supply rootDir"
+        >> raiseSignal sigTERM
+        >> threadDelay maxBound
+        >> return ""
     Just x -> return x
 
 delegateMount :: FilePath -> FilePath -> IO ()
@@ -20,8 +26,9 @@ delegateMount fromPath toPath =
     (callCommand ("move-mount -db " <> fromPath <> " " <> toPath <> " >/dev/null 2>&1"))
     ( \e ->
         let err = show (e :: IOException)
-         in putStrLn err
+         in hPutStrLn stderr err
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
 
 moveOMount :: FilePath -> FilePath -> IO ()
@@ -37,8 +44,9 @@ moveOMount fromPath toPath =
     )
     ( \e ->
         let err = show (e :: IOException)
-         in putStrLn err
+         in hPutStrLn stderr err
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
 
 usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
@@ -55,8 +63,9 @@ usrOverlayMount hp fromPath toPath =
     )
     ( \e ->
         let err = show (e :: IOException)
-         in putStrLn err
+         in hPutStrLn stderr err
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
 
 privateMount :: FilePath -> IO ()
@@ -65,8 +74,9 @@ privateMount path =
     (callCommand ("mount --make-private " <> path))
     ( \e ->
         let err = show (e :: IOException)
-         in putStrLn err
+         in hPutStrLn stderr err
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
 
 bindMount :: FilePath -> FilePath -> IO ()
@@ -75,8 +85,9 @@ bindMount fromPath toPath =
     (callCommand ("mount -o bind --make-private " <> fromPath <> " " <> toPath))
     ( \e ->
         let err = show (e :: IOException)
-         in putStrLn err
+         in hPutStrLn stderr err
               >> raiseSignal sigTERM
+              >> threadDelay maxBound
     )
 
 activateNewRoot :: FilePath -> FilePath -> Dep.Deployment -> IO ()

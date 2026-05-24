@@ -1,6 +1,6 @@
 module Main.Util where
 
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent qualified as Conc
 import Control.Concurrent.STM qualified as Stm
 import Control.Exception.Base (IOException, catch)
@@ -11,6 +11,7 @@ import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathE
 import System.Environment (getArgs, getExecutablePath)
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory, (</>))
+import System.IO (hPutStrLn, stderr)
 import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (createSymbolicLink)
 import System.Process (callCommand, readProcess)
@@ -118,8 +119,9 @@ relabelSeLinuxPath rootPath contexts bp =
       )
       ( \e ->
           let _ = show (e :: IOException)
-           in printInfo "Relabeling boot directory failed." False
+           in hPutStrLn stderr "Relabeling boot directory failed."
                 >> raiseSignal sigTERM
+                >> threadDelay maxBound
       )
     catch
       ( callCommand
@@ -138,8 +140,9 @@ relabelSeLinuxPath rootPath contexts bp =
       )
       ( \e ->
           let _ = show (e :: IOException)
-           in printInfo "Relabeling root directory failed." False
+           in hPutStrLn stderr "Relabeling root directory failed."
                 >> raiseSignal sigTERM
+                >> threadDelay maxBound
       )
 
 getUserId :: IO Int
@@ -178,7 +181,11 @@ signKernel bp dep target =
                     let _ = show (e :: IOException)
                      in return False
                 )
-            else raiseSignal sigTERM >> error ("Kernel for deployment " <> show dep <> " doesn't seem to exist.")
+            else
+              hPutStrLn stderr ("Kernel for deployment " <> show dep <> " doesn't seem to exist.")
+                >> raiseSignal sigTERM
+                >> threadDelay maxBound
+                >> return False
         )
 
 genericRootfulPreproc :: FilePath -> Bool -> Bool -> IO MessageContainer

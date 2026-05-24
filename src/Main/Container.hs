@@ -1,7 +1,9 @@
 module Main.Container where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, catch)
 import Main.Util qualified as Util
+import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand, readProcess)
 
@@ -9,10 +11,19 @@ mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
   catch
     (callCommand ("podman create --replace --name " <> podName <> " " <> podUri <> " >/dev/null 2>&1"))
-    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+    ( \e ->
+        hPutStrLn stderr ("Creating container failed: " <> show (e :: IOException))
+          >> raiseSignal sigTERM
+          >> threadDelay maxBound
+    )
     >> catch
       (readProcess "podman" ["mount", "ald-root"] [])
-      (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM >> return "failed")
+      ( \e ->
+          hPutStrLn stderr ("Mounting container failed: " <> show (e :: IOException))
+            >> raiseSignal sigTERM
+            >> threadDelay maxBound
+            >> return "failed"
+      )
     >>= \podMount -> return $ Util.removeString "\n" podMount
 
 umountContainer :: String -> IO ()
@@ -49,7 +60,11 @@ buildImage podUri locTag confPath =
             <> confPath
         )
     )
-    (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+    ( \e ->
+        hPutStrLn stderr ("Building image failed: " <> show (e :: IOException))
+          >> raiseSignal sigTERM
+          >> threadDelay maxBound
+    )
 
 pullImage :: String -> IO Bool
 pullImage podUri = do
@@ -66,5 +81,9 @@ pullImage podUri = do
     else do
       catch
         (callCommand ("podman pull " <> podUri))
-        (\e -> let _ = show (e :: IOException) in raiseSignal sigTERM)
+        ( \e ->
+            hPutStrLn stderr ("Pulling image failed: " <> show (e :: IOException))
+              >> raiseSignal sigTERM
+              >> threadDelay maxBound
+        )
       return True

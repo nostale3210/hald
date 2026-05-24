@@ -1,6 +1,12 @@
-module Main.Fail where
+module Main.Fail
+  ( installAsyncHandler,
+    cleanupOnError,
+    failAndCleanup,
+  )
+where
 
-import Control.Exception (SomeException, catch)
+import Control.Concurrent (myThreadId, throwTo)
+import Control.Exception (AsyncException (UserInterrupt), catch)
 import Control.Monad (unless)
 import Data.Maybe qualified
 import GHC.IO.Exception (IOException)
@@ -11,8 +17,23 @@ import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import System.FilePath ((</>))
-import System.Posix.Signals (Handler (..), Signal, SignalInfo (siginfoSignal), installHandler, signalProcess)
-import System.Process (Pid, callCommand, getCurrentPid)
+import System.Posix.Signals (Handler (CatchInfoOnce), Signal, installHandler)
+import System.Process (callCommand)
+
+installAsyncHandler :: [Signal] -> IO ()
+installAsyncHandler signals = do
+  tid <- myThreadId
+  mapM_ (\sig -> installHandler sig (CatchInfoOnce $ \_ -> throwTo tid UserInterrupt) Nothing) signals
+
+cleanupOnError :: Config.Config -> Maybe Dep.Deployment -> IO ()
+cleanupOnError conf dep = do
+  let pending = Data.Maybe.fromMaybe Dep.dummyDeployment dep
+  catch
+    (callCommand ("umount -Rfl " <> Config.haldPath conf </> show (Dep.identifier pending) <> " 2>/dev/null"))
+    (\(_ :: IOException) -> return ())
+  deployments <- Dep.getDeploymentsInt conf
+  Space.gcBroken deployments conf
+  failAndCleanup pending conf
 
 failAndCleanup :: Dep.Deployment -> Config.Config -> IO ()
 failAndCleanup dep conf = do
@@ -21,34 +42,3 @@ failAndCleanup dep conf = do
   Container.umountContainer "ald-root"
   Container.rmContainer "ald-root"
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
-
-genericTerminationHandler :: Config.Config -> Pid -> Maybe Dep.Deployment -> Handler
-genericTerminationHandler conf pid dep = CatchInfoOnce $ \signalInfo -> do
-  putStrLn $
-    "Caught signal "
-      <> show (siginfoSignal signalInfo)
-      <> "\nExecution interrupted!"
-      <> "\nAttempting cleanup of broken deployments..."
-  _ <- catch cleanup (\(_ :: SomeException) -> return ())
-  signalProcess (siginfoSignal signalInfo) pid
-  where
-    pending = Data.Maybe.fromMaybe Dep.dummyDeployment dep
-    cleanup = do
-      catch
-        (callCommand ("umount -Rfl " <> Config.haldPath conf </> show (Dep.identifier pending) <> " 2>/dev/null"))
-        (\(_ :: IOException) -> return ())
-      deployments <- Dep.getDeploymentsInt conf
-      Space.gcBroken deployments conf
-      failAndCleanup pending conf
-
-installGenericHandler :: [Signal] -> Config.Config -> Maybe Dep.Deployment -> IO ()
-installGenericHandler signals conf pending =
-  case signals of
-    [] -> return ()
-    signal : xs ->
-      getCurrentPid >>= \pid ->
-        installHandler
-          signal
-          (genericTerminationHandler conf pid pending)
-          Nothing
-          >> installGenericHandler xs conf pending

@@ -1,5 +1,6 @@
 module Main.Assemble.Gc where
 
+import Control.Exception (onException)
 import Main.CAS.GC qualified as CasGc
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
@@ -12,8 +13,9 @@ import System.Posix.Signals (sigINT, sigTERM)
 deploymentGcAssemblyPre :: Config.Config -> Bool -> IO ()
 deploymentGcAssemblyPre conf inhibit = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
-  Fail.installGenericHandler [sigINT, sigTERM] conf Nothing
-  deploymentGcAssembly conf msgCont
+  Fail.installAsyncHandler [sigINT, sigTERM]
+  flip onException (Fail.cleanupOnError conf Nothing) $
+    deploymentGcAssembly conf msgCont
 
 deploymentGcAssembly :: Config.Config -> Util.MessageContainer -> IO ()
 deploymentGcAssembly conf msgCont = do
