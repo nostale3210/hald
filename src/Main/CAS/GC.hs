@@ -5,11 +5,11 @@ import Control.Monad (unless, when)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Lock qualified as Lock
-import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, pathIsSymbolicLink, removeDirectory, removeFile)
+import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, removeDirectory, removeFile)
 import System.FilePath ((</>))
-import System.Posix.Files (FileStatus, deviceID, fileID, getSymbolicLinkStatus)
+import System.Posix.Files (FileStatus, deviceID, fileID, getSymbolicLinkStatus, isDirectory, isRegularFile)
 import System.Posix.Types (DeviceID, FileID)
-import UnliftIO.Async (pooledForConcurrentlyN, pooledForConcurrentlyN_, pooledMapConcurrently)
+import UnliftIO.Async (pooledForConcurrently, pooledForConcurrentlyN, pooledForConcurrentlyN_, pooledForConcurrently_)
 import UnliftIO.Concurrent (getNumCapabilities)
 
 restoreStoreFlags :: Config.Config -> IO ()
@@ -33,9 +33,13 @@ restoreStoreFlags conf = do
 collectGarbage :: Config.Config -> [Int] -> IO ()
 collectGarbage conf keptDepIds = do
   threads <- getNumCapabilities
-  let casDir = Config.haldPath conf </> "objects"
+  let hp = Config.haldPath conf
+      casDir = hp </> "objects"
       workThreads = max 1 $ div threads 2
-  referenced <- concat <$> pooledMapConcurrently (`walkDeployment` Config.haldPath conf) keptDepIds
+  referenced <- fmap concat . pooledForConcurrently keptDepIds $ \depId -> do
+    let dir = hp </> show depId </> "usr"
+    dirExists <- doesDirectoryExist dir
+    if dirExists then walkTree dir else return []
   let refSet = Set.fromList referenced
   dirExists <- doesDirectoryExist casDir
   when dirExists $ do
@@ -57,32 +61,18 @@ collectGarbage conf keptDepIds = do
   removeEmptyDirectories casDir
   restoreStoreFlags conf
 
-walkDeployment :: Int -> FilePath -> IO [(DeviceID, FileID)]
-walkDeployment depId hp = do
-  let dir = hp </> show depId </> "usr"
-  dirExists <- doesDirectoryExist dir
-  if dirExists then walkTree dir else return []
-
 walkTree :: FilePath -> IO [(DeviceID, FileID)]
 walkTree dir = do
   contents <- listDirectory dir
-  results <- pooledForConcurrentlyN 2 contents $ processEntry dir
-  return $ concat results
-  where
-    processEntry parent name = do
-      let path = parent </> name
-      isDir <- doesDirectoryExist path
-      isLink <- pathIsSymbolicLink path
-      if isDir && not isLink
-        then walkTree path
-        else
-          if isLink
-            then return []
-            else do
-              mStat <- tryStat path
-              case mStat of
-                Just stat -> return [(deviceID stat, fileID stat)]
-                Nothing -> return []
+  fmap concat . pooledForConcurrentlyN 2 contents $ \name -> do
+    let path = dir </> name
+    mStat <- tryStat path
+    case mStat of
+      Just stat
+        | isRegularFile stat -> return [(deviceID stat, fileID stat)]
+        | isDirectory stat -> walkTree path
+        | otherwise -> return []
+      Nothing -> return []
 
 tryStat :: FilePath -> IO (Maybe FileStatus)
 tryStat path =
@@ -95,7 +85,7 @@ removeEmptyDirectories dir = do
   dirExists <- doesDirectoryExist dir
   when dirExists $ do
     contents <- listDirectory dir
-    pooledForConcurrentlyN_ 2 contents $ \name -> do
+    pooledForConcurrently_ contents $ \name -> do
       let subPath = dir </> name
       isDir <- doesDirectoryExist subPath
       when isDir $ removeEmptyDirectories subPath

@@ -13,9 +13,9 @@ import Control.Monad (unless)
 import Data.HashMap.Strict qualified as HashMap
 import Main.CAS.Hash qualified as Hash
 import Main.Lock qualified as Lock
-import System.Directory (copyFile, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist, listDirectory, pathIsSymbolicLink)
+import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory)
 import System.FilePath (takeDirectory, (</>))
-import System.Posix.Files (createLink, createSymbolicLink, readSymbolicLink)
+import System.Posix.Files (createLink, createSymbolicLink, getSymbolicLinkStatus, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrentlyN, pooledMapConcurrently_)
 
 data TreeEntry
@@ -39,19 +39,21 @@ buildIndex rootDir currentDir = do
     process name = do
       let fullPath = currentDir </> name
           relPath = makeRelative rootDir fullPath
-      isDir <- doesDirectoryExist fullPath
-      isLink <- pathIsSymbolicLink fullPath
-      if isDir && not isLink
-        then do
-          sub <- buildIndex rootDir fullPath
-          return $ HashMap.insert relPath TreeDir sub
-        else
-          if isLink
-            then do
+      mStat <-
+        catch
+          (Just <$> getSymbolicLinkStatus fullPath)
+          (\e -> let _ = show (e :: IOException) in return Nothing)
+      case mStat of
+        Just stat
+          | isRegularFile stat -> return $ HashMap.singleton relPath (TreeFile "")
+          | isDirectory stat -> do
+              sub <- buildIndex rootDir fullPath
+              return $ HashMap.insert relPath TreeDir sub
+          | isSymbolicLink stat -> do
               target <- readSymbolicLink fullPath
               return $ HashMap.singleton relPath (TreeSymlink target)
-            else
-              return $ HashMap.singleton relPath (TreeFile "")
+          | otherwise -> return $ HashMap.singleton relPath (TreeFile "")
+        Nothing -> return HashMap.empty
 
 resolveEntries :: FilePath -> FilePath -> AssetMap -> IO AssetMap
 resolveEntries srcDir casDir =
