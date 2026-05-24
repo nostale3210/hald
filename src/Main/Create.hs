@@ -231,7 +231,8 @@ syncDeploymentUsrCas containerMount conf dep = do
   Util.ensureDirExists casDir
   Util.ensureDirExists depUsr
   assetMap <- CAS.ingestPath (containerMount <> "/usr") casDir
-  CAS.deployTree depUsr assetMap
+  CAS.deployTree casDir depUsr assetMap
+  CAS.saveAssetMap (depPath <> "/.ald_assetmap") assetMap
   catch
     ( writeFile
         (depPath <> "/usr/.ald_dep")

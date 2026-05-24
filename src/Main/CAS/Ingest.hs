@@ -3,6 +3,8 @@ module Main.CAS.Ingest
     AssetMap,
     ingestPath,
     deployTree,
+    saveAssetMap,
+    loadAssetMap,
   )
 where
 
@@ -11,7 +13,7 @@ import Control.Monad (unless)
 import Data.HashMap.Strict qualified as HashMap
 import Main.CAS.Hash qualified as Hash
 import Main.Lock qualified as Lock
-import System.Directory (copyFile, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory, pathIsSymbolicLink)
+import System.Directory (copyFile, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist, listDirectory, pathIsSymbolicLink)
 import System.FilePath (takeDirectory, (</>))
 import System.Posix.Files (createLink, createSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrentlyN, pooledMapConcurrently_)
@@ -73,15 +75,40 @@ doHash srcPath casDir = do
       (copyFile srcPath destPath)
       (\e -> let _ = show (e :: IOException) in return ())
     Lock.setImmutable destPath
-  return destPath
+  return (prefix </> hashStr)
 
-deployTree :: FilePath -> AssetMap -> IO ()
-deployTree targetRoot assetMap = do
-  let casPaths = [p | TreeFile p <- HashMap.elems assetMap]
+deployTree :: FilePath -> FilePath -> AssetMap -> IO ()
+deployTree casDir targetRoot assetMap = do
+  let entries = HashMap.toList assetMap
+      casPaths = [casDir </> p | (_, TreeFile p) <- entries]
   pooledMapConcurrently_ Lock.setMutable casPaths
   createDirectoryIfMissing True targetRoot
-  pooledMapConcurrently_ (deployEntry targetRoot) (HashMap.toList assetMap)
+  pooledMapConcurrently_ (deployEntry casDir targetRoot) entries
   pooledMapConcurrently_ Lock.setImmutable casPaths
+
+saveAssetMap :: FilePath -> AssetMap -> IO ()
+saveAssetMap path assetMap = do
+  lines' <- pooledMapConcurrently formatEntry (HashMap.toList assetMap)
+  writeFile path (unlines lines')
+
+loadAssetMap :: FilePath -> IO AssetMap
+loadAssetMap path = do
+  content <- readFile path
+  entries <- pooledMapConcurrently parseEntry (lines content)
+  return (HashMap.fromList entries)
+
+formatEntry :: (FilePath, TreeEntry) -> IO String
+formatEntry (relPath, entry) = return $ case entry of
+  TreeDir -> "D\t" <> relPath
+  TreeSymlink target -> "S\t" <> relPath <> "\t" <> target
+  TreeFile casRelPath -> "F\t" <> relPath <> "\t" <> casRelPath
+
+parseEntry :: String -> IO (FilePath, TreeEntry)
+parseEntry line = return $ case words line of
+  ["D", relPath] -> (relPath, TreeDir)
+  ["S", relPath, target] -> (relPath, TreeSymlink target)
+  ["F", relPath, casRelPath] -> (relPath, TreeFile casRelPath)
+  _ -> error $ "Invalid AssetMap entry: " <> line
 
 makeRelative :: FilePath -> FilePath -> FilePath
 makeRelative root path =
@@ -96,14 +123,18 @@ stripPrefix (x : xs) (y : ys)
   | x == y = stripPrefix xs ys
 stripPrefix _ _ = Nothing
 
-deployEntry :: FilePath -> (FilePath, TreeEntry) -> IO ()
-deployEntry targetRoot (relPath, entry) = case entry of
+deployEntry :: FilePath -> FilePath -> (FilePath, TreeEntry) -> IO ()
+deployEntry casDir targetRoot (relPath, entry) = case entry of
   TreeDir -> createDirectoryIfMissing True (targetRoot </> relPath)
   TreeSymlink target -> do
-    createDirectoryIfMissing True (takeDirectory (targetRoot </> relPath))
-    createSymbolicLink target (targetRoot </> relPath)
-  TreeFile casPath -> do
     let targetPath = targetRoot </> relPath
+    targetExists <- doesPathExist targetPath
+    unless targetExists $ do
+      createDirectoryIfMissing True (takeDirectory targetPath)
+      createSymbolicLink target targetPath
+  TreeFile casRelPath -> do
+    let casPath = casDir </> casRelPath
+        targetPath = targetRoot </> relPath
     targetExists <- doesFileExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
