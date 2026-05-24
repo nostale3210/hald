@@ -9,7 +9,7 @@ import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, pathI
 import System.FilePath ((</>))
 import System.Posix.Files (FileStatus, deviceID, fileID, getSymbolicLinkStatus)
 import System.Posix.Types (DeviceID, FileID)
-import UnliftIO.Async (mapConcurrently, pooledForConcurrentlyN, pooledForConcurrentlyN_)
+import UnliftIO.Async (pooledForConcurrentlyN, pooledForConcurrentlyN_, pooledMapConcurrently)
 import UnliftIO.Concurrent (getNumCapabilities)
 
 restoreStoreFlags :: Config.Config -> IO ()
@@ -35,7 +35,7 @@ collectGarbage conf keptDepIds = do
   threads <- getNumCapabilities
   let casDir = Config.haldPath conf </> "objects"
       workThreads = max 1 $ div threads 2
-  referenced <- concat <$> mapConcurrently (`walkDeployment` Config.haldPath conf) keptDepIds
+  referenced <- concat <$> pooledMapConcurrently (`walkDeployment` Config.haldPath conf) keptDepIds
   let refSet = Set.fromList referenced
   dirExists <- doesDirectoryExist casDir
   when dirExists $ do
