@@ -2,6 +2,7 @@ module Main.CAS.GC (collectGarbage, restoreStoreFlags) where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (unless, when)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Lock qualified as Lock
@@ -9,7 +10,7 @@ import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, remov
 import System.FilePath ((</>))
 import System.Posix.Files (FileStatus, deviceID, fileID, getSymbolicLinkStatus, isDirectory, isRegularFile)
 import System.Posix.Types (DeviceID, FileID)
-import UnliftIO.Async (pooledForConcurrently, pooledForConcurrentlyN, pooledForConcurrentlyN_, pooledForConcurrently_)
+import UnliftIO.Async (pooledForConcurrentlyN_, pooledForConcurrently_)
 import UnliftIO.Concurrent (getNumCapabilities)
 
 restoreStoreFlags :: Config.Config -> IO ()
@@ -36,11 +37,13 @@ collectGarbage conf keptDepIds = do
   let hp = Config.haldPath conf
       casDir = hp </> "objects"
       workThreads = max 1 $ div threads 2
-  referenced <- fmap concat . pooledForConcurrently keptDepIds $ \depId -> do
+  refSetVar <- newIORef Set.empty
+  pooledForConcurrently_ keptDepIds $ \depId -> do
     let dir = hp </> show depId </> "usr"
     dirExists <- doesDirectoryExist dir
-    if dirExists then walkTree dir else return []
-  let refSet = Set.fromList referenced
+    when dirExists $ walkTree dir refSetVar
+  refSet <- readIORef refSetVar
+
   dirExists <- doesDirectoryExist casDir
   when dirExists $ do
     prefixes <- listDirectory casDir
@@ -48,31 +51,33 @@ collectGarbage conf keptDepIds = do
       let casPath = casDir </> p
       objects <- listDirectory casPath
       pooledForConcurrentlyN_ workThreads objects $ \o -> do
-        mStat <- tryStat o
+        let casObj = casPath </> o
+        mStat <- tryStat casObj
         case mStat of
           Just stat -> do
             let ino = (deviceID stat, fileID stat)
             unless (ino `Set.member` refSet) $ do
-              Lock.setMutable o
+              Lock.setMutable casObj
               catch
-                (removeFile o)
+                (removeFile casObj)
                 (\e -> let _ = show (e :: IOException) in return ())
           Nothing -> return ()
   removeEmptyDirectories casDir
   restoreStoreFlags conf
 
-walkTree :: FilePath -> IO [(DeviceID, FileID)]
-walkTree dir = do
+walkTree :: FilePath -> IORef (Set.Set (DeviceID, FileID)) -> IO ()
+walkTree dir ref = do
   contents <- listDirectory dir
-  fmap concat . pooledForConcurrentlyN 2 contents $ \name -> do
+  pooledForConcurrentlyN_ 2 contents $ \name -> do
     let path = dir </> name
     mStat <- tryStat path
     case mStat of
       Just stat
-        | isRegularFile stat -> return [(deviceID stat, fileID stat)]
-        | isDirectory stat -> walkTree path
-        | otherwise -> return []
-      Nothing -> return []
+        | isRegularFile stat ->
+            atomicModifyIORef' ref (\s -> (Set.insert (deviceID stat, fileID stat) s, ()))
+        | isDirectory stat -> walkTree path ref
+        | otherwise -> return ()
+      Nothing -> return ()
 
 tryStat :: FilePath -> IO (Maybe FileStatus)
 tryStat path =

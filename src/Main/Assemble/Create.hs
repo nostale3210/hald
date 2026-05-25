@@ -15,6 +15,7 @@ import Main.Lock qualified as Lock
 import Main.Space qualified as Space
 import Main.Util qualified as Util
 import System.FilePath ((</>))
+import System.Mem (performGC)
 import System.Posix.Signals (sigINT, sigTERM)
 
 deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> Bool -> Bool -> IO ()
@@ -113,7 +114,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
 
       when act $ Asac.deploymentActivationAssembly (Dep.identifier newDep) pbConf msgCont
 
-      when gc $ Asgc.deploymentGcAssembly pbConf msgCont
+      when gc $ performGC >> Asgc.deploymentGcAssembly pbConf msgCont
 
       CasGc.restoreStoreFlags pbConf
       Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath pbConf

@@ -96,9 +96,9 @@ parseLines = map parseEntry . B8.lines
 
 parseEntry :: B8.ByteString -> (B8.ByteString, TreeEntry)
 parseEntry line = case B8.split '\t' line of
-  [d, p]     | d == B8.singleton 'D' -> (p, TreeDir)
-  [s, p, t]  | s == B8.singleton 'S' -> (p, TreeSymlink t)
-  [f, p, c]  | f == B8.singleton 'F' -> (p, TreeFile c)
+  [d, p] | d == B8.singleton 'D' -> (p, TreeDir)
+  [s, p, t] | s == B8.singleton 'S' -> (p, TreeSymlink t)
+  [f, p, c] | f == B8.singleton 'F' -> (p, TreeFile c)
   _ -> error $ "Invalid AssetMap entry: " <> B8.unpack line
 
 setMutableIfFile :: FilePath -> (B8.ByteString, TreeEntry) -> IO ()
