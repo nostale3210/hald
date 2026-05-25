@@ -9,6 +9,8 @@ where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (forM, forM_, unless)
+import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as B8
 import Data.HashMap.Strict qualified as HashMap
 import Main.CAS.Hash qualified as Hash
 import Main.Lock qualified as Lock
@@ -20,8 +22,8 @@ import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
 
 data TreeEntry
   = TreeDir
-  | TreeSymlink FilePath
-  | TreeFile FilePath
+  | TreeSymlink !B8.ByteString
+  | TreeFile !B8.ByteString
 
 type AssetMap = HashMap.HashMap FilePath TreeEntry
 
@@ -82,35 +84,35 @@ doHash srcPath casDir = do
 
 deployTreeFromFile :: FilePath -> FilePath -> FilePath -> IO ()
 deployTreeFromFile casDir targetRoot assetMapFile = do
-  content <- readFile assetMapFile
+  content <- BS.readFile assetMapFile
   let entries = parseLines content
-      casPaths = [casDir </> p | (_, TreeFile p) <- entries]
-  pooledMapConcurrently_ Lock.setMutable casPaths
+  pooledMapConcurrently_ (setMutableIfFile casDir) entries
   createDirectoryIfMissing True targetRoot
   pooledMapConcurrently_ (deployEntry casDir targetRoot) entries
-  pooledMapConcurrently_ Lock.setImmutable casPaths
+  pooledMapConcurrently_ (setImmutableIfFile casDir) entries
 
-parseLines :: String -> [(FilePath, TreeEntry)]
-parseLines = map parseEntry . lines
+parseLines :: BS.ByteString -> [(B8.ByteString, TreeEntry)]
+parseLines = map parseEntry . B8.lines
+
+parseEntry :: B8.ByteString -> (B8.ByteString, TreeEntry)
+parseEntry line = case B8.split '\t' line of
+  [d, p]     | d == B8.singleton 'D' -> (p, TreeDir)
+  [s, p, t]  | s == B8.singleton 'S' -> (p, TreeSymlink t)
+  [f, p, c]  | f == B8.singleton 'F' -> (p, TreeFile c)
+  _ -> error $ "Invalid AssetMap entry: " <> B8.unpack line
+
+setMutableIfFile :: FilePath -> (B8.ByteString, TreeEntry) -> IO ()
+setMutableIfFile casDir (_, TreeFile p) = Lock.setMutable (casDir </> B8.unpack p)
+setMutableIfFile _ _ = return ()
+
+setImmutableIfFile :: FilePath -> (B8.ByteString, TreeEntry) -> IO ()
+setImmutableIfFile casDir (_, TreeFile p) = Lock.setImmutable (casDir </> B8.unpack p)
+setImmutableIfFile _ _ = return ()
 
 loadAssetMap :: FilePath -> IO AssetMap
 loadAssetMap path = do
-  content <- readFile path
-  return $ HashMap.fromList (parseLines content)
-
-parseEntry :: String -> (FilePath, TreeEntry)
-parseEntry line = case splitOn '\t' line of
-  ["D", relPath] -> (relPath, TreeDir)
-  ["S", relPath, target] -> (relPath, TreeSymlink target)
-  ["F", relPath, casRelPath] -> (relPath, TreeFile casRelPath)
-  _ -> error $ "Invalid AssetMap entry: " <> line
-
-splitOn :: Char -> String -> [String]
-splitOn _ "" = []
-splitOn c s = let (before, after) = break (== c) s
-              in before : case after of
-                   ""       -> []
-                   (_:rest) -> splitOn c rest
+  content <- BS.readFile path
+  return $ HashMap.fromList [(B8.unpack p, e) | (p, e) <- parseLines content]
 
 makeRelative :: FilePath -> FilePath -> FilePath
 makeRelative root path =
@@ -125,18 +127,18 @@ stripPrefix (x : xs) (y : ys)
   | x == y = stripPrefix xs ys
 stripPrefix _ _ = Nothing
 
-deployEntry :: FilePath -> FilePath -> (FilePath, TreeEntry) -> IO ()
+deployEntry :: FilePath -> FilePath -> (B8.ByteString, TreeEntry) -> IO ()
 deployEntry casDir targetRoot (relPath, entry) = case entry of
-  TreeDir -> createDirectoryIfMissing True (targetRoot </> relPath)
+  TreeDir -> createDirectoryIfMissing True (targetRoot </> B8.unpack relPath)
   TreeSymlink target -> do
-    let targetPath = targetRoot </> relPath
+    let targetPath = targetRoot </> B8.unpack relPath
     targetExists <- doesPathExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
-      createSymbolicLink target targetPath
+      createSymbolicLink (B8.unpack target) targetPath
   TreeFile casRelPath -> do
-    let casPath = casDir </> casRelPath
-        targetPath = targetRoot </> relPath
+    let casPath = casDir </> B8.unpack casRelPath
+        targetPath = targetRoot </> B8.unpack relPath
     targetExists <- doesFileExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
