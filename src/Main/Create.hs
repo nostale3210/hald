@@ -228,11 +228,11 @@ syncDeploymentUsrCas containerMount conf dep = do
   let depPath = Config.haldPath conf </> show (Dep.identifier dep)
       casDir = Config.haldPath conf <> "/objects"
       depUsr = depPath <> "/usr"
+      assetMapPath = depPath <> "/.ald_assetmap"
   Util.ensureDirExists casDir
   Util.ensureDirExists depUsr
-  assetMap <- CAS.ingestPath (containerMount <> "/usr") casDir
-  CAS.deployTree casDir depUsr assetMap
-  CAS.saveAssetMap (depPath <> "/.ald_assetmap") assetMap
+  CAS.ingestTree (containerMount <> "/usr") casDir assetMapPath
+  CAS.deployTreeFromFile casDir depUsr assetMapPath
   catch
     ( writeFile
         (depPath <> "/usr/.ald_dep")

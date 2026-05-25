@@ -1,22 +1,22 @@
 module Main.CAS.Ingest
   ( TreeEntry (..),
     AssetMap,
-    ingestPath,
-    deployTree,
-    saveAssetMap,
+    ingestTree,
+    deployTreeFromFile,
     loadAssetMap,
   )
 where
 
 import Control.Exception (IOException, catch)
-import Control.Monad (unless)
+import Control.Monad (forM, forM_, unless)
 import Data.HashMap.Strict qualified as HashMap
 import Main.CAS.Hash qualified as Hash
 import Main.Lock qualified as Lock
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory)
 import System.FilePath (takeDirectory, (</>))
+import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openFile)
 import System.Posix.Files (createLink, createSymbolicLink, getSymbolicLinkStatus, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
-import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrentlyN, pooledMapConcurrently_)
+import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
 
 data TreeEntry
   = TreeDir
@@ -25,43 +25,44 @@ data TreeEntry
 
 type AssetMap = HashMap.HashMap FilePath TreeEntry
 
-ingestPath :: FilePath -> FilePath -> IO AssetMap
-ingestPath srcDir casDir = do
-  entries <- buildIndex srcDir srcDir
-  resolveEntries srcDir casDir entries
+ingestTree :: FilePath -> FilePath -> FilePath -> IO ()
+ingestTree srcDir casDir outputPath = do
+  h <- openFile outputPath WriteMode
+  walkDirectory h srcDir srcDir casDir
+  hClose h
 
-buildIndex :: FilePath -> FilePath -> IO AssetMap
-buildIndex rootDir currentDir = do
+walkDirectory :: Handle -> FilePath -> FilePath -> FilePath -> IO ()
+walkDirectory h rootDir currentDir casDir = do
   contents <- listDirectory currentDir
-  entries <- pooledMapConcurrentlyN 2 process contents
-  return $ HashMap.unions entries
-  where
-    process name = do
-      let fullPath = currentDir </> name
-          relPath = makeRelative rootDir fullPath
-      mStat <-
-        catch
-          (Just <$> getSymbolicLinkStatus fullPath)
-          (\e -> let _ = show (e :: IOException) in return Nothing)
-      case mStat of
-        Just stat
-          | isRegularFile stat -> return $ HashMap.singleton relPath (TreeFile "")
-          | isDirectory stat -> do
-              sub <- buildIndex rootDir fullPath
-              return $ HashMap.insert relPath TreeDir sub
-          | isSymbolicLink stat -> do
-              target <- readSymbolicLink fullPath
-              return $ HashMap.singleton relPath (TreeSymlink target)
-          | otherwise -> return $ HashMap.singleton relPath (TreeFile "")
-        Nothing -> return HashMap.empty
+  classified <- forM contents $ \name -> do
+    let fullPath = currentDir </> name
+        relPath = makeRelative rootDir fullPath
+    mStat <-
+      catch
+        (Just <$> getSymbolicLinkStatus fullPath)
+        (\e -> let _ = show (e :: IOException) in return Nothing)
+    return (fullPath, relPath, mStat)
 
-resolveEntries :: FilePath -> FilePath -> AssetMap -> IO AssetMap
-resolveEntries srcDir casDir =
-  fmap HashMap.fromList . pooledMapConcurrently resolveEntry . HashMap.toList
-  where
-    resolveEntry (relPath, entry) = case entry of
-      TreeFile "" -> (relPath,) . TreeFile <$> doHash (srcDir </> relPath) casDir
-      _ -> return (relPath, entry)
+  let dirs = [(fp, rp) | (fp, rp, Just s) <- classified, isDirectory s]
+      files = [(fp, rp) | (fp, rp, Just s) <- classified, isRegularFile s]
+      syms = [(fp, rp) | (fp, rp, Just s) <- classified, isSymbolicLink s]
+      special = [(fp, rp) | (fp, rp, Just s) <- classified, not (isDirectory s || isRegularFile s || isSymbolicLink s)]
+
+  forM_ dirs $ \(fullPath, relPath) -> do
+    hPutStrLn h $ "D\t" <> relPath
+    walkDirectory h rootDir fullPath casDir
+
+  hashedFiles <- pooledMapConcurrently (\(fp, rp) -> doHash fp casDir >>= \cp -> return (rp, cp)) files
+  forM_ hashedFiles $ \(relPath, casPath) ->
+    hPutStrLn h $ "F\t" <> relPath <> "\t" <> casPath
+
+  forM_ syms $ \(fullPath, relPath) -> do
+    target <- readSymbolicLink fullPath
+    hPutStrLn h $ "S\t" <> relPath <> "\t" <> target
+
+  hashedSpecial <- pooledMapConcurrently (\(fp, rp) -> doHash fp casDir >>= \cp -> return (rp, cp)) special
+  forM_ hashedSpecial $ \(relPath, casPath) ->
+    hPutStrLn h $ "F\t" <> relPath <> "\t" <> casPath
 
 doHash :: FilePath -> FilePath -> IO FilePath
 doHash srcPath casDir = do
@@ -79,38 +80,37 @@ doHash srcPath casDir = do
     Lock.setImmutable destPath
   return (prefix </> hashStr)
 
-deployTree :: FilePath -> FilePath -> AssetMap -> IO ()
-deployTree casDir targetRoot assetMap = do
-  let entries = HashMap.toList assetMap
+deployTreeFromFile :: FilePath -> FilePath -> FilePath -> IO ()
+deployTreeFromFile casDir targetRoot assetMapFile = do
+  content <- readFile assetMapFile
+  let entries = parseLines content
       casPaths = [casDir </> p | (_, TreeFile p) <- entries]
   pooledMapConcurrently_ Lock.setMutable casPaths
   createDirectoryIfMissing True targetRoot
   pooledMapConcurrently_ (deployEntry casDir targetRoot) entries
   pooledMapConcurrently_ Lock.setImmutable casPaths
 
-saveAssetMap :: FilePath -> AssetMap -> IO ()
-saveAssetMap path assetMap = do
-  lines' <- pooledMapConcurrently formatEntry (HashMap.toList assetMap)
-  writeFile path (unlines lines')
+parseLines :: String -> [(FilePath, TreeEntry)]
+parseLines = map parseEntry . lines
 
 loadAssetMap :: FilePath -> IO AssetMap
 loadAssetMap path = do
   content <- readFile path
-  entries <- pooledMapConcurrently parseEntry (lines content)
-  return (HashMap.fromList entries)
+  return $ HashMap.fromList (parseLines content)
 
-formatEntry :: (FilePath, TreeEntry) -> IO String
-formatEntry (relPath, entry) = return $ case entry of
-  TreeDir -> "D\t" <> relPath
-  TreeSymlink target -> "S\t" <> relPath <> "\t" <> target
-  TreeFile casRelPath -> "F\t" <> relPath <> "\t" <> casRelPath
-
-parseEntry :: String -> IO (FilePath, TreeEntry)
-parseEntry line = return $ case words line of
+parseEntry :: String -> (FilePath, TreeEntry)
+parseEntry line = case splitOn '\t' line of
   ["D", relPath] -> (relPath, TreeDir)
   ["S", relPath, target] -> (relPath, TreeSymlink target)
   ["F", relPath, casRelPath] -> (relPath, TreeFile casRelPath)
   _ -> error $ "Invalid AssetMap entry: " <> line
+
+splitOn :: Char -> String -> [String]
+splitOn _ "" = []
+splitOn c s = let (before, after) = break (== c) s
+              in before : case after of
+                   ""       -> []
+                   (_:rest) -> splitOn c rest
 
 makeRelative :: FilePath -> FilePath -> FilePath
 makeRelative root path =
