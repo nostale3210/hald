@@ -14,10 +14,11 @@ import Data.ByteString.Char8 qualified as B8
 import Data.HashMap.Strict qualified as HashMap
 import Main.CAS.Hash qualified as Hash
 import Main.Lock qualified as Lock
+import Main.Util qualified as Util
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openFile)
-import System.Posix.Files (createLink, createSymbolicLink, getSymbolicLinkStatus, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
+import System.Posix.Files (createLink, createSymbolicLink, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
 
 data TreeEntry
@@ -39,10 +40,7 @@ walkDirectory h rootDir currentDir casDir = do
   classified <- forM contents $ \name -> do
     let fullPath = currentDir </> name
         relPath = makeRelative rootDir fullPath
-    mStat <-
-      catch
-        (Just <$> getSymbolicLinkStatus fullPath)
-        (\e -> let _ = show (e :: IOException) in return Nothing)
+    mStat <- Util.tryStat fullPath
     return (fullPath, relPath, mStat)
 
   let dirs = [(fp, rp) | (fp, rp, Just s) <- classified, isDirectory s]

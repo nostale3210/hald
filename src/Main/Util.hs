@@ -12,7 +12,7 @@ import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
-import System.Posix.Files (createSymbolicLink)
+import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus)
 import System.Process (callCommand, readProcess)
 
 data MessageContainer
@@ -265,3 +265,9 @@ printChannelMsg channel bar = do
   channelEmpty <- Stm.atomically $ Stm.isEmptyTChan channel
   when channelEmpty (Stm.atomically $ Stm.unGetTChan channel status)
   printChannelMsg channel (C.append (C.tail bar) (C.pack [C.head bar]))
+
+tryStat :: FilePath -> IO (Maybe FileStatus)
+tryStat path =
+  catch
+    (Just <$> getSymbolicLinkStatus path)
+    (\e -> let _ = show (e :: IOException) in return Nothing)

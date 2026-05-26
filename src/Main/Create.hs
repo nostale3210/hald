@@ -4,6 +4,7 @@ module Main.Create where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (forM_, void, when)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
 import Main.CAS.Ingest qualified as CAS
@@ -14,11 +15,11 @@ import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, fin
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isAlreadyExistsError)
-import System.Posix (createSymbolicLink, fileMode, getSymbolicLinkStatus, isDirectory, isSymbolicLink, setFileMode)
+import System.Posix (createSymbolicLink, fileMode, isDirectory, isSymbolicLink, modificationTime, setFileMode)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand, readProcess)
-import UnliftIO.Async (concurrently, pooledForConcurrentlyN_)
-import UnliftIO.Concurrent (getNumCapabilities, threadDelay)
+import UnliftIO.Async (concurrently, pooledForConcurrentlyN_, pooledForConcurrently_)
+import UnliftIO.Concurrent (threadDelay)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
 createSkeleton depId conf uki backend =
@@ -71,7 +72,7 @@ syncSystemConfig dropState conf dep = do
   let depPath = Config.haldPath conf </> show (Dep.identifier dep)
   if dropState
     then syncMinimumState depPath
-    else syncState conf depPath
+    else syncState depPath
   catch
     ( callCommand
         ( "podman cp ald-root:/etc/passwd "
@@ -156,38 +157,42 @@ syncMinimumState =
         )
     )
 
-syncState :: Config.Config -> FilePath -> IO ()
-syncState conf depPath =
-  let syncCmd = "cp --parents -a \"$@\" " <> depPath <> " >/dev/null 2>&1 || :"
-      xargsSync = "xargs -n1 -P\"$(($(nproc --all)/2))\" bash -c '" <> syncCmd <> "' _"
-   in catch
-        ( callCommand
-            ( "touch -d 1970-01-01T01:00:00 "
-                <> Config.configPath conf
-                <> "/.stamp &&"
-                <> "find /etc ! -type d -newer "
-                <> Config.configPath conf
-                <> "/.stamp"
-                <> " | "
-                <> xargsSync
-            )
-        )
-        ( \e ->
-            let err = show (e :: IOException)
-             in hPutStrLn stderr err
-                  >> raiseSignal sigTERM
-                  >> threadDelay maxBound
-        )
-        >> syncMinimumState depPath
+syncState :: FilePath -> IO ()
+syncState depPath = do
+  let depEtc = depPath <> "/etc"
+  Util.ensureDirExists depEtc
+  files <- collectFiles "/etc"
+  destExists <- doesDirectoryExist depPath
+  when destExists $
+    pooledForConcurrently_ files $ \p ->
+      syncSingle p depPath
+  syncMinimumState depPath
+
+collectFiles :: FilePath -> IO [FilePath]
+collectFiles root = do
+  ref <- newIORef []
+  walk root ref
+  readIORef ref
+  where
+    walk dir ref = do
+      entries <- catch (listDirectory dir) (\e -> let _ = show (e :: IOException) in return [])
+      pooledForConcurrentlyN_ 2 entries $ \entry -> do
+        let path = dir </> entry
+        mStat <- Util.tryStat path
+        case mStat of
+          Nothing -> return ()
+          Just s
+            | modificationTime s == 0 -> return ()
+            | isDirectory s -> walk path ref
+            | otherwise ->
+                atomicModifyIORef' ref (\acc -> (path : acc, ()))
 
 syncSingleFile :: [FilePath] -> FilePath -> IO ()
 syncSingleFile files destination
   | null files = return ()
   | otherwise = do
-      threads <- getNumCapabilities
-      let workThreads = max 1 $ div threads 2
       destExists <- doesDirectoryExist destination
-      when destExists $ pooledForConcurrentlyN_ workThreads files $ \p ->
+      when destExists $ pooledForConcurrently_ files $ \p ->
         catch
           (syncSingle p destination)
           ( \e ->
@@ -200,35 +205,32 @@ syncSingleFile files destination
                     )
                     False
           )
-  where
-    syncSingle :: FilePath -> FilePath -> IO ()
-    syncSingle path target = do
-      stat <-
-        catch
-          (Just <$> getSymbolicLinkStatus path)
-          (\e -> let _ = show (e :: IOException) in return Nothing)
-      let fullTarget = target <> path
-      case stat of
-        Just x ->
-          if
-            | isDirectory x -> do
-                Util.ensureDirExists fullTarget
-                setFileMode fullTarget (fileMode x)
-                dirEntries <- listDirectory path
-                forM_ dirEntries $ \entry ->
-                  syncSingle (path </> entry) target
-            | isSymbolicLink x -> do
-                symTarget <- getSymbolicLinkTarget path
-                Util.ensureDirExists (takeDirectory fullTarget)
-                catch
-                  (createSymbolicLink symTarget fullTarget)
-                  ( \e ->
-                      if isAlreadyExistsError e then return () else ioError e
-                  )
-            | otherwise -> do
-                Util.ensureDirExists (takeDirectory fullTarget)
-                copyFileWithMetadata path fullTarget
-        Nothing -> void $ ioError (userError "Couldn't stat path!")
+
+syncSingle :: FilePath -> FilePath -> IO ()
+syncSingle path target = do
+  stat <- Util.tryStat path
+  let fullTarget = target <> path
+  case stat of
+    Just x ->
+      if
+        | isDirectory x -> do
+            Util.ensureDirExists fullTarget
+            setFileMode fullTarget (fileMode x)
+            dirEntries <- listDirectory path
+            forM_ dirEntries $ \entry ->
+              syncSingle (path </> entry) target
+        | isSymbolicLink x -> do
+            symTarget <- getSymbolicLinkTarget path
+            Util.ensureDirExists (takeDirectory fullTarget)
+            catch
+              (createSymbolicLink symTarget fullTarget)
+              ( \e ->
+                  if isAlreadyExistsError e then return () else ioError e
+              )
+        | otherwise -> do
+            Util.ensureDirExists (takeDirectory fullTarget)
+            copyFileWithMetadata path fullTarget
+    Nothing -> void $ ioError (userError "Couldn't stat path!")
 
 syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
 syncDeploymentUsr containerMount conf dep linkSource =

@@ -6,9 +6,10 @@ import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Lock qualified as Lock
+import Main.Util qualified as Util
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, removeDirectory, removeFile)
 import System.FilePath ((</>))
-import System.Posix.Files (FileStatus, deviceID, fileID, getSymbolicLinkStatus, isDirectory, isRegularFile)
+import System.Posix.Files (deviceID, fileID, isDirectory, isRegularFile)
 import System.Posix.Types (DeviceID, FileID)
 import UnliftIO.Async (pooledForConcurrentlyN_, pooledForConcurrently_)
 import UnliftIO.Concurrent (getNumCapabilities)
@@ -52,7 +53,7 @@ collectGarbage conf keptDepIds = do
       objects <- listDirectory casPath
       pooledForConcurrentlyN_ workThreads objects $ \o -> do
         let casObj = casPath </> o
-        mStat <- tryStat casObj
+        mStat <- Util.tryStat casObj
         case mStat of
           Just stat -> do
             let ino = (deviceID stat, fileID stat)
@@ -70,7 +71,7 @@ walkTree dir ref = do
   contents <- listDirectory dir
   pooledForConcurrentlyN_ 2 contents $ \name -> do
     let path = dir </> name
-    mStat <- tryStat path
+    mStat <- Util.tryStat path
     case mStat of
       Just stat
         | isRegularFile stat ->
@@ -78,12 +79,6 @@ walkTree dir ref = do
         | isDirectory stat -> walkTree path ref
         | otherwise -> return ()
       Nothing -> return ()
-
-tryStat :: FilePath -> IO (Maybe FileStatus)
-tryStat path =
-  catch
-    (Just <$> getSymbolicLinkStatus path)
-    (\e -> let _ = show (e :: IOException) in return Nothing)
 
 removeEmptyDirectories :: FilePath -> IO ()
 removeEmptyDirectories dir = do
