@@ -2,15 +2,16 @@ module Main.Container where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, catch)
+import Control.Monad (void)
 import Main.Util qualified as Util
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (raiseSignal, sigTERM)
-import System.Process (callCommand, readProcess)
+import System.Process (readProcess)
 
 mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
   catch
-    (callCommand ("podman create --replace --name " <> podName <> " " <> podUri <> " >/dev/null 2>&1"))
+    (void $ readProcess "podman" ["create", "--replace", "--name", podName, podUri] "")
     ( \e ->
         hPutStrLn stderr ("Creating container failed: " <> show (e :: IOException))
           >> raiseSignal sigTERM
@@ -29,9 +30,7 @@ mountContainer podName podUri =
 umountContainer :: String -> IO ()
 umountContainer podName =
   catch
-    ( callCommand
-        ("podman unmount " <> podName <> " >/dev/null 2>&1")
-    )
+    (void $ readProcess "podman" ["unmount", podName] "")
     ( \e ->
         let err = show (e :: IOException)
          in Util.printInfo ("Unmounting container " <> podName <> " unsuccessful\n" <> err) False
@@ -40,9 +39,7 @@ umountContainer podName =
 rmContainer :: String -> IO ()
 rmContainer podName =
   catch
-    ( callCommand
-        ("podman rm -f " <> podName <> " >/dev/null 2>&1")
-    )
+    (void $ readProcess "podman" ["rm", "-f", podName] "")
     ( \e ->
         let err = show (e :: IOException)
          in Util.printInfo ("Removing container " <> podName <> " unsuccessful\n" <> err) False
@@ -51,14 +48,17 @@ rmContainer podName =
 buildImage :: String -> String -> FilePath -> IO ()
 buildImage podUri locTag confPath =
   catch
-    ( callCommand
-        ( "podman build --isolation=chroot --build-arg=SOURCE_IMAGE="
-            <> podUri
-            <> " -t "
-            <> locTag
-            <> " "
-            <> confPath
-        )
+    ( void $
+        readProcess
+          "podman"
+          [ "build",
+            "--isolation=chroot",
+            "--build-arg=SOURCE_IMAGE=" <> podUri,
+            "-t",
+            locTag,
+            confPath
+          ]
+          ""
     )
     ( \e ->
         hPutStrLn stderr ("Building image failed: " <> show (e :: IOException))
@@ -80,7 +80,7 @@ pullImage podUri = do
     then Util.printInfo "Latest image already pulled" False >> return False
     else do
       catch
-        (callCommand ("podman pull " <> podUri))
+        (void $ readProcess "podman" ["pull", podUri] "")
         ( \e ->
             hPutStrLn stderr ("Pulling image failed: " <> show (e :: IOException))
               >> raiseSignal sigTERM

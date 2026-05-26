@@ -74,15 +74,10 @@ syncSystemConfig dropState conf dep = do
     then syncMinimumState depPath
     else syncState depPath
   catch
-    ( callCommand
-        ( "podman cp ald-root:/etc/passwd "
-            <> depPath
-            <> "/.tmp.passwd && podman cp ald-root:/etc/shadow "
-            <> depPath
-            <> "/.tmp.shadow && podman cp ald-root:/etc/group "
-            <> depPath
-            <> "/.tmp.group"
-        )
+    ( do
+        void $ readProcess "podman" ["cp", "ald-root:/etc/passwd", depPath <> "/.tmp.passwd"] ""
+        void $ readProcess "podman" ["cp", "ald-root:/etc/shadow", depPath <> "/.tmp.shadow"] ""
+        void $ readProcess "podman" ["cp", "ald-root:/etc/group", depPath <> "/.tmp.group"] ""
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -307,14 +302,7 @@ copyContainerFiles conf dep = do
   let hp = Config.haldPath conf
       depId = Dep.identifier dep
   catch
-    ( callCommand
-        ( "podman cp -a ald-root:/files "
-            <> hp
-            <> "/."
-            <> show depId
-            <> " >/dev/null 2>&1"
-        )
-    )
+    (void $ readProcess "podman" ["cp", "-a", "ald-root:/files", hp <> "/." <> show depId] "")
     ( \e ->
         let _ = show (e :: IOException)
          in catch
