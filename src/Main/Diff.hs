@@ -3,14 +3,15 @@
 module Main.Diff where
 
 import Control.Exception (IOException, catch)
-import Data.List (sortBy)
+import Data.Char (isSpace)
+import Data.List (sort, sortBy)
 import Data.Maybe qualified
 import Data.Ord (Down (..), comparing)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
 import System.IO (hClose, openTempFile)
-import System.Process (readProcess)
+import System.Process (proc, readCreateProcessWithExitCode)
 import UnliftIO.Async (concurrently)
 
 selectDeployment :: [Int] -> [Int] -> Int
@@ -57,18 +58,43 @@ printDiff from to conf =
           diffStati xStatus yStatus
 
 getStatus :: Int -> Config.Config -> IO String
-getStatus dep conf =
-  Dep.getDeployment dep conf >>= \fullDep ->
-    let root = Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
-     in (return $ listCmd (Config.packageManager conf) root)
+getStatus dep conf = do
+  fullDep <- Dep.getDeployment dep conf
+  let root = Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
+      PkgQuery cmd args post = listCmd (Config.packageManager conf) root
+  catch
+    (post <$> Util.quietReadProcess cmd args "")
+    (\e -> let _ = show (e :: IOException) in return "")
 
-listCmd :: Config.PackageManager -> String -> String
+data PkgQuery = PkgQuery
+  { pqCmd :: FilePath,
+    pqArgs :: [String],
+    pqPost :: String -> String
+  }
+
+listCmd :: Config.PackageManager -> String -> PkgQuery
 listCmd mgr root =
   case mgr of
-    Config.Apk -> "apk list -I --root=" <> root <> " | sed \"s/\\s.*//\""
-    Config.Pacman -> "pacman -Q --root=" <> root
-    Config.Rpm -> "rpm -qa --root=" <> root <> " 2>/dev/null"
-    Config.Xbps -> "xbps-query -l --rootdir=" <> root <> " | awk '{print $2}'"
+    Config.Apk ->
+      PkgQuery
+        "apk"
+        ["list", "-I", "--root=" <> root]
+        (unlines . map (takeWhile (not . isSpace)) . lines)
+    Config.Pacman ->
+      PkgQuery
+        "pacman"
+        ["-Q", "--root=" <> root]
+        id
+    Config.Rpm ->
+      PkgQuery
+        "rpm"
+        ["-qa", "--root=" <> root]
+        id
+    Config.Xbps ->
+      PkgQuery
+        "xbps-query"
+        ["-l", "--rootdir=" <> root]
+        (unlines . map (unwords . drop 1 . words) . lines)
 
 diffStati :: String -> String -> IO ()
 diffStati from to = do
@@ -78,10 +104,8 @@ diffStati from to = do
   hClose hTo
   catch
     ( do
-        fromOutput <- readProcess "sh" ["-c", Util.removeString "\n" from <> " | sort"] ""
-        writeFile tmpFrom fromOutput
-        toOutput <- readProcess "sh" ["-c", Util.removeString "\n" to <> " | sort"] ""
-        writeFile tmpTo toOutput
+        writeFile tmpFrom (unlines . sort . lines $ from)
+        writeFile tmpTo (unlines . sort . lines $ to)
     )
     ( \e ->
         let _ = show (e :: IOException)
@@ -89,7 +113,7 @@ diffStati from to = do
     )
     >> catch
       ( do
-          diffOutput <- readProcess "sh" ["-c", "diff -y " <> tmpFrom <> " " <> tmpTo <> " | grep \"|\\|>\\|<\""] ""
-          putStr diffOutput
+          (_, diffOutput, _) <- readCreateProcessWithExitCode (proc "diff" ["-y", tmpFrom, tmpTo]) ""
+          putStr . unlines . filter (any (`elem` "|><")) . lines $ diffOutput
       )
       (\e -> let _ = show (e :: IOException) in putStrLn "No difference found.")
