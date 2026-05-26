@@ -23,7 +23,7 @@ getNewRoot nextDep =
 delegateMount :: FilePath -> FilePath -> IO ()
 delegateMount fromPath toPath =
   catch
-    (void $ readProcess "move-mount" ["-db", fromPath, toPath] "")
+    (void $ Util.quietReadProcess "move-mount" ["-db", fromPath, toPath] "")
     ( \e ->
         let err = show (e :: IOException)
          in hPutStrLn stderr err
@@ -34,7 +34,7 @@ delegateMount fromPath toPath =
 moveOMount :: FilePath -> FilePath -> IO ()
 moveOMount fromPath toPath =
   catch
-    (void $ readProcess "move-mount" ["-mb", fromPath, toPath] "")
+    (void $ Util.quietReadProcess "move-mount" ["-mb", fromPath, toPath] "")
     ( \e ->
         let err = show (e :: IOException)
          in hPutStrLn stderr err

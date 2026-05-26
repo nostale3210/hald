@@ -302,7 +302,7 @@ copyContainerFiles conf dep = do
   let hp = Config.haldPath conf
       depId = Dep.identifier dep
   catch
-    (void $ readProcess "podman" ["cp", "-a", "ald-root:/files", hp <> "/." <> show depId] "")
+    (void $ Util.quietReadProcess "podman" ["cp", "-a", "ald-root:/files", hp <> "/." <> show depId] "")
     ( \e ->
         let _ = show (e :: IOException)
          in catch
@@ -374,7 +374,7 @@ installUki conf deployment = do
     Just x ->
       catch
         ( void $
-            readProcess
+            Util.quietReadProcess
               "ukify"
               [ "build",
                 "--linux=" <> kernel,

@@ -3,17 +3,18 @@ module Main.Util where
 import Control.Concurrent (forkIO, getNumCapabilities, threadDelay)
 import Control.Concurrent qualified as Conc
 import Control.Concurrent.STM qualified as Stm
-import Control.Exception.Base (IOException, catch)
+import Control.Exception (IOException, catch)
 import Control.Monad (forM, unless, void, when)
 import Data.ByteString.Char8 qualified as C
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
+import System.Exit (ExitCode (..))
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus)
-import System.Process (readProcess)
+import System.Process (CreateProcess (..), StdStream (NoStream), proc, readCreateProcessWithExitCode, readProcess)
 
 data MessageContainer
   = MessageContainer {interactive :: Bool, channel :: Stm.TChan String}
@@ -84,11 +85,21 @@ createSymlink target link =
 isMountpoint :: FilePath -> IO Bool
 isMountpoint path =
   catch
-    (readProcess "mountpoint" ["-q", path] "" >> return True)
+    (quietReadProcess "mountpoint" ["-q", path] "" >> return True)
     ( \e ->
         let _ = show (e :: IOException)
          in return False
     )
+
+quietReadProcess :: FilePath -> [String] -> String -> IO String
+quietReadProcess cmd args input = do
+  (ec, out, _) <-
+    readCreateProcessWithExitCode
+      (proc cmd args) {std_err = NoStream}
+      input
+  case ec of
+    ExitSuccess -> return out
+    ExitFailure n -> ioError (userError (cmd <> " failed with exit code " <> show n))
 
 recursiveFileSearch :: FilePath -> FilePath -> IO [FilePath]
 recursiveFileSearch rootDir fileName = do
@@ -110,7 +121,7 @@ recursiveFileSearch rootDir fileName = do
 relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
 relabelSeLinuxPath rootPath contexts bp = do
   catch
-    (void $ readProcess "restorecon" ["-RF", bp] "")
+    (void $ quietReadProcess "restorecon" ["-RF", bp] "")
     ( \e ->
         let _ = show (e :: IOException)
          in hPutStrLn stderr "Relabeling boot directory failed."
@@ -122,7 +133,7 @@ relabelSeLinuxPath rootPath contexts bp = do
         createSymlink "usr/lib" (rootPath <> "/lib")
         createSymlink "usr/lib64" (rootPath <> "/lib64")
         threads <- getNumCapabilities
-        void $ readProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
+        void $ quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
     )
     ( \e ->
         let _ = show (e :: IOException)
@@ -159,7 +170,7 @@ signKernel bp dep target =
         ( if kernelExists
             then
               catch
-                (readProcess "sbctl" ["sign", kernelPath] "" >> return True)
+                (quietReadProcess "sbctl" ["sign", kernelPath] "" >> return True)
                 ( \e ->
                     let _ = show (e :: IOException)
                      in return False

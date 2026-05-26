@@ -11,7 +11,7 @@ import System.Process (readProcess)
 mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
   catch
-    (void $ readProcess "podman" ["create", "--replace", "--name", podName, podUri] "")
+    (void $ Util.quietReadProcess "podman" ["create", "--replace", "--name", podName, podUri] "")
     ( \e ->
         hPutStrLn stderr ("Creating container failed: " <> show (e :: IOException))
           >> raiseSignal sigTERM
@@ -30,7 +30,7 @@ mountContainer podName podUri =
 umountContainer :: String -> IO ()
 umountContainer podName =
   catch
-    (void $ readProcess "podman" ["unmount", podName] "")
+    (void $ Util.quietReadProcess "podman" ["unmount", podName] "")
     ( \e ->
         let err = show (e :: IOException)
          in Util.printInfo ("Unmounting container " <> podName <> " unsuccessful\n" <> err) False
@@ -39,7 +39,7 @@ umountContainer podName =
 rmContainer :: String -> IO ()
 rmContainer podName =
   catch
-    (void $ readProcess "podman" ["rm", "-f", podName] "")
+    (void $ Util.quietReadProcess "podman" ["rm", "-f", podName] "")
     ( \e ->
         let err = show (e :: IOException)
          in Util.printInfo ("Removing container " <> podName <> " unsuccessful\n" <> err) False
