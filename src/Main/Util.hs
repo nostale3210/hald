@@ -267,6 +267,9 @@ printChannelMsg channel bar = do
   when channelEmpty (Stm.atomically $ Stm.unGetTChan channel status)
   printChannelMsg channel (C.append (C.tail bar) (C.pack [C.head bar]))
 
+listDirSafe :: FilePath -> IO [FilePath]
+listDirSafe dir = catch (listDirectory dir) (\(_ :: IOException) -> return [])
+
 tryStat :: FilePath -> IO (Maybe FileStatus)
 tryStat path =
   catch

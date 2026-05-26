@@ -141,10 +141,10 @@ getDeployments conf = do
         not (null f)
           && head f `elem` ['0' .. '9']
           && let l = length f in l >= 6 && drop (l - 5) f == ".conf"
-  hpEntries <- catch (listDirectory hp) (\(_ :: IOException) -> return [])
-  bdEntries <- catch (listDirectory bp) (\(_ :: IOException) -> return [])
-  beEntries <- catch (listDirectory ep) (\(_ :: IOException) -> return [])
-  ukiEntries <- catch (listDirectory up) (\(_ :: IOException) -> return [])
+  hpEntries <- Util.listDirSafe hp
+  bdEntries <- Util.listDirSafe bp
+  beEntries <- Util.listDirSafe ep
+  ukiEntries <- Util.listDirSafe up
   let lockfiles = map (hp </>) $ filter startsWithDotDigit hpEntries
       rootDirs = map (hp </>) $ filter startsWithDigit hpEntries
       bootDirs = map (bp </>) $ filter startsWithDigit bdEntries

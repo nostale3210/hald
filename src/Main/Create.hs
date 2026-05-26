@@ -170,7 +170,7 @@ collectFiles root = do
   readIORef ref
   where
     walk dir ref = do
-      entries <- catch (listDirectory dir) (\e -> let _ = show (e :: IOException) in return [])
+      entries <- Util.listDirSafe dir
       pooledForConcurrentlyN_ 2 entries $ \entry -> do
         let path = dir </> entry
         mStat <- Util.tryStat path
@@ -306,7 +306,7 @@ normalizeDepEtcTimestamps conf dep = do
     walk depEtc
   where
     walk dir = do
-      entries <- catch (listDirectory dir) (\e -> let _ = show (e :: IOException) in return [])
+      entries <- Util.listDirSafe dir
       forM_ entries $ \entry -> do
         let path = dir </> entry
         stat <- Util.tryStat path

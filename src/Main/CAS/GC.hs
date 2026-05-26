@@ -82,15 +82,19 @@ walkTree dir ref = do
 
 removeEmptyDirectories :: FilePath -> IO ()
 removeEmptyDirectories dir = do
-  dirExists <- doesDirectoryExist dir
-  when dirExists $ do
-    contents <- listDirectory dir
-    pooledForConcurrently_ contents $ \name -> do
-      let subPath = dir </> name
-      isDir <- doesDirectoryExist subPath
-      when isDir $ removeEmptyDirectories subPath
-    contents' <- listDirectory dir
-    when (null contents') $
-      catch
-        (removeDirectory dir)
-        (\e -> let _ = show (e :: IOException) in return ())
+  mStat <- Util.tryStat dir
+  case mStat of
+    Just s | isDirectory s -> do
+      contents <- listDirectory dir
+      pooledForConcurrently_ contents $ \name -> do
+        let subPath = dir </> name
+        mSubStat <- Util.tryStat subPath
+        case mSubStat of
+          Just ss | isDirectory ss -> removeEmptyDirectories subPath
+          _ -> return ()
+      contents' <- listDirectory dir
+      when (null contents') $
+        catch
+          (removeDirectory dir)
+          (\e -> let _ = show (e :: IOException) in return ())
+    _ -> return ()

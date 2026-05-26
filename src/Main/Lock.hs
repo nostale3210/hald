@@ -9,7 +9,8 @@ import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (poke, sizeOf)
 import Main.Util qualified as Util
-import System.Directory (doesDirectoryExist, listDirectory, pathIsSymbolicLink)
+import System.Directory (listDirectory)
+import System.Posix.Files (isDirectory, isSymbolicLink)
 import System.FilePath ((</>))
 import System.Process (readProcess)
 
@@ -78,17 +79,17 @@ clearRecursiveImmutable :: FilePath -> IO ()
 clearRecursiveImmutable fp =
   catch
     ( do
-        isLink <- pathIsSymbolicLink fp
-        unless isLink $ do
-          isDir <- doesDirectoryExist fp
-          if isDir
-            then do
-              setFileFlag fp 0
-              contents <- listDirectory fp
-              forM_ contents $ \name ->
-                clearRecursiveImmutable (fp </> name)
-            else
-              setFileFlag fp 0
+        mStat <- Util.tryStat fp
+        case mStat of
+          Just s
+            | isSymbolicLink s -> return ()
+            | isDirectory s -> do
+                setFileFlag fp 0
+                contents <- listDirectory fp
+                forM_ contents $ \name ->
+                  clearRecursiveImmutable (fp </> name)
+            | otherwise -> setFileFlag fp 0
+          Nothing -> return ()
     )
     (\e -> let _ = show (e :: IOException) in return ())
 
