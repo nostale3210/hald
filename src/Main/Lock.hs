@@ -1,16 +1,17 @@
 module Main.Lock where
 
 import Control.Exception (IOException, catch)
-import Control.Monad (forM_, unless, when)
+import Control.Monad (forM_, unless, void, when)
 import Data.Bits (shiftL, (.|.))
 import Foreign.C.String (CString, withCString)
 import Foreign.C.Types (CInt (..), CLong (..), CULong (..))
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (poke, sizeOf)
+import Main.Util qualified as Util
 import System.Directory (doesDirectoryExist, listDirectory, pathIsSymbolicLink)
 import System.FilePath ((</>))
-import System.Process (callCommand)
+import System.Process (readProcess)
 
 fsIocSetflags :: CULong
 fsIocSetflags =
@@ -94,16 +95,14 @@ clearRecursiveImmutable fp =
 roBindMountDirToSelf :: ReadMode -> FilePath -> IO ()
 roBindMountDirToSelf readMode dirPath =
   catch
-    ( callCommand
-        ( "mountpoint "
-            <> dirPath
-            <> " >/dev/null 2>&1 || mount -o bind,"
-            <> show readMode
-            <> " --make-private "
-            <> dirPath
-            <> " "
-            <> dirPath
-        )
+    ( do
+        mounted <- Util.isMountpoint dirPath
+        unless mounted $
+          void $
+            readProcess
+              "mount"
+              ["-o", "bind," <> show readMode, "--make-private", dirPath, dirPath]
+              ""
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -113,14 +112,11 @@ roBindMountDirToSelf readMode dirPath =
 roRemountDir :: ReadMode -> FilePath -> IO ()
 roRemountDir readMode dirPath =
   catch
-    ( callCommand
-        ( "mountpoint "
-            <> dirPath
-            <> " >/dev/null 2>&1 && mount -o remount,"
-            <> show readMode
-            <> " "
-            <> dirPath
-        )
+    ( do
+        mounted <- Util.isMountpoint dirPath
+        when mounted $
+          void $
+            readProcess "mount" ["-o", "remount," <> show readMode, dirPath] ""
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -130,14 +126,11 @@ roRemountDir readMode dirPath =
 umountDirForcibly :: RecursiveUmount -> FilePath -> IO ()
 umountDirForcibly opts dirPath =
   catch
-    ( callCommand
-        ( "mountpoint "
-            <> dirPath
-            <> " >/dev/null 2>&1 && umount -"
-            <> show opts
-            <> " "
-            <> dirPath
-        )
+    ( do
+        mounted <- Util.isMountpoint dirPath
+        when mounted $
+          void $
+            readProcess "umount" ["-" <> show opts, dirPath] ""
     )
     ( \e ->
         let _ = show (e :: IOException)

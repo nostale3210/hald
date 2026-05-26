@@ -2,13 +2,13 @@ module Main.Activate where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, catch)
-import Control.Monad (when)
+import Control.Monad (void, when)
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Util qualified as Util
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (addSignal, blockSignals, emptySignalSet, raiseSignal, sigINT, sigTERM, unblockSignals)
-import System.Process (callCommand)
+import System.Process (readProcess)
 
 getNewRoot :: Dep.Deployment -> IO FilePath
 getNewRoot nextDep =
@@ -23,7 +23,7 @@ getNewRoot nextDep =
 delegateMount :: FilePath -> FilePath -> IO ()
 delegateMount fromPath toPath =
   catch
-    (callCommand ("move-mount -db " <> fromPath <> " " <> toPath <> " >/dev/null 2>&1"))
+    (void $ readProcess "move-mount" ["-db", fromPath, toPath] "")
     ( \e ->
         let err = show (e :: IOException)
          in hPutStrLn stderr err
@@ -34,14 +34,7 @@ delegateMount fromPath toPath =
 moveOMount :: FilePath -> FilePath -> IO ()
 moveOMount fromPath toPath =
   catch
-    ( callCommand
-        ( "move-mount -mb "
-            <> fromPath
-            <> " "
-            <> toPath
-            <> " >/dev/null 2>&1"
-        )
-    )
+    (void $ readProcess "move-mount" ["-mb", fromPath, toPath] "")
     ( \e ->
         let err = show (e :: IOException)
          in hPutStrLn stderr err
@@ -52,14 +45,18 @@ moveOMount fromPath toPath =
 usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
 usrOverlayMount hp fromPath toPath =
   catch
-    ( callCommand
-        ( "mount -t overlay usr-root --make-private -o lowerdir="
-            <> fromPath
-            <> ":"
-            <> (hp <> "/empty")
-            <> " "
-            <> toPath
-        )
+    ( void $
+        readProcess
+          "mount"
+          [ "-t",
+            "overlay",
+            "usr-root",
+            "--make-private",
+            "-o",
+            "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
+            toPath
+          ]
+          ""
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -71,7 +68,7 @@ usrOverlayMount hp fromPath toPath =
 privateMount :: FilePath -> IO ()
 privateMount path =
   catch
-    (callCommand ("mount --make-private " <> path))
+    (void $ readProcess "mount" ["--make-private", path] "")
     ( \e ->
         let err = show (e :: IOException)
          in hPutStrLn stderr err
@@ -82,7 +79,7 @@ privateMount path =
 bindMount :: FilePath -> FilePath -> IO ()
 bindMount fromPath toPath =
   catch
-    (callCommand ("mount -o bind --make-private " <> fromPath <> " " <> toPath))
+    (void $ readProcess "mount" ["-o", "bind", "--make-private", fromPath, toPath] "")
     ( \e ->
         let err = show (e :: IOException)
          in hPutStrLn stderr err

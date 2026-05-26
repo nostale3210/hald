@@ -6,7 +6,7 @@ module Main.Fail
 where
 
 import Control.Concurrent (myThreadId, throwTo)
-import Control.Exception (AsyncException (UserInterrupt), catch)
+import Control.Exception (AsyncException (UserInterrupt))
 import Control.Monad (unless)
 import Data.Maybe qualified
 import Main.CAS.GC qualified as CasGc
