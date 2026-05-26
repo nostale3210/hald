@@ -15,6 +15,7 @@ import Main.Container qualified as Container
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
 import Main.Space qualified as Space
+import Main.Util qualified as Util
 import System.FilePath ((</>))
 import System.Posix.Signals (Handler (CatchInfoOnce), Signal, installHandler)
 
@@ -23,8 +24,11 @@ installAsyncHandler signals = do
   tid <- myThreadId
   mapM_ (\sig -> installHandler sig (CatchInfoOnce $ \_ -> throwTo tid UserInterrupt) Nothing) signals
 
-cleanupOnError :: Config.Config -> Maybe Dep.Deployment -> IO ()
-cleanupOnError conf dep = do
+cleanupOnError :: Config.Config -> Maybe Dep.Deployment -> Maybe Util.MessageContainer -> IO ()
+cleanupOnError conf dep mMsgCont = do
+  case mMsgCont of
+    Just mc -> Util.printProgress mc "Fatal error. Cleaning up..."
+    Nothing -> return ()
   let pending = Data.Maybe.fromMaybe Dep.dummyDeployment dep
   Lock.umountDirForcibly Lock.Rfl $ Config.haldPath conf </> show (Dep.identifier pending)
   deployments <- Dep.getDeploymentsInt conf

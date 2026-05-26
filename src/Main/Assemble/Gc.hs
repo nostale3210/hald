@@ -14,7 +14,7 @@ deploymentGcAssemblyPre :: Config.Config -> Bool -> IO ()
 deploymentGcAssemblyPre conf inhibit = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
   Fail.installAsyncHandler [sigINT, sigTERM]
-  flip onException (Fail.cleanupOnError conf Nothing) $
+  flip onException (Fail.cleanupOnError conf Nothing (Just msgCont)) $
     deploymentGcAssembly conf msgCont
 
 deploymentGcAssembly :: Config.Config -> Util.MessageContainer -> IO ()

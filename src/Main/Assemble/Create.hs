@@ -37,7 +37,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
       newDep = Dep.createDeployment existingDeps conf backend
 
   Fail.installAsyncHandler [sigINT, sigTERM]
-  flip onException (Fail.cleanupOnError conf (Just newDep)) $
+  flip onException (Fail.cleanupOnError conf (Just newDep) (Just msgCont)) $
     when updated $ do
       Util.printInfo
         ("Creating Deployment " <> show (Dep.identifier newDep) <> "...")

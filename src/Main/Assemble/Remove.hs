@@ -23,7 +23,7 @@ deploymentErasureAssembly :: Int -> Config.Config -> Util.MessageContainer -> IO
 deploymentErasureAssembly depId conf msgCont = do
   tbRmDep <- Dep.getDeployment depId conf
   Fail.installAsyncHandler [sigINT, sigTERM]
-  flip onException (Fail.cleanupOnError conf (Just tbRmDep)) $ do
+  flip onException (Fail.cleanupOnError conf (Just tbRmDep) (Just msgCont)) $ do
     Util.printInfo
       ("Removing deployment " <> show (Dep.identifier tbRmDep) <> "...")
       (Config.interactive conf)

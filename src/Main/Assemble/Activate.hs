@@ -14,7 +14,7 @@ deploymentActivationAssemblyPre :: Int -> Config.Config -> Bool -> IO ()
 deploymentActivationAssemblyPre newDepId conf inhibit = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
   Fail.installAsyncHandler [sigINT, sigTERM]
-  flip onException (Fail.cleanupOnError conf Nothing) $
+  flip onException (Fail.cleanupOnError conf Nothing (Just msgCont)) $
     deploymentActivationAssembly newDepId conf msgCont
 
 deploymentActivationAssembly :: Int -> Config.Config -> Util.MessageContainer -> IO ()
