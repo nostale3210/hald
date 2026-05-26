@@ -268,15 +268,35 @@ syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
   let depPath = Config.haldPath conf </> show (Dep.identifier dep)
       depEtc = depPath <> "/etc"
+      containerEtc = containerMount <> "/etc"
   Util.ensureDirExists depEtc
   catch
-    ( void $
-        readProcess
-          "cp"
-          ["-a", containerMount <> "/etc/.", depEtc <> "/."]
-          ""
-    )
+    (copyTree containerEtc depEtc)
     (\e -> hPutStrLn stderr ("Syncing deployment /etc failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
+
+copyTree :: FilePath -> FilePath -> IO ()
+copyTree src dst = do
+  entries <- listDirectory src
+  pooledForConcurrentlyN_ 2 entries $ \entry -> do
+    let srcPath = src </> entry
+        dstPath = dst </> entry
+    mStat <- Util.tryStat srcPath
+    case mStat of
+      Nothing -> return ()
+      Just s
+        | isDirectory s -> do
+            Util.ensureDirExists dstPath
+            setFileMode dstPath (fileMode s)
+            copyTree srcPath dstPath
+        | isSymbolicLink s -> do
+            symTarget <- getSymbolicLinkTarget srcPath
+            Util.ensureDirExists (takeDirectory dstPath)
+            catch
+              (createSymbolicLink symTarget dstPath)
+              (\e -> if isAlreadyExistsError e then return () else ioError e)
+        | otherwise -> do
+            Util.ensureDirExists (takeDirectory dstPath)
+            copyFileWithMetadata srcPath dstPath
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
 normalizeDepEtcTimestamps conf dep = do
