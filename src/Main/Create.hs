@@ -1,16 +1,20 @@
+{-# LANGUAGE MultiWayIf #-}
+
 module Main.Create where
 
 import Control.Exception (IOException, catch)
-import Control.Monad (void, when)
+import Control.Monad (forM_, void, when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
 import Main.CAS.Ingest qualified as CAS
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
-import System.Directory (copyFile, doesDirectoryExist, findExecutable, removeFile)
+import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, listDirectory, removeFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
+import System.IO.Error (isAlreadyExistsError)
+import System.Posix (createSymbolicLink, fileMode, getSymbolicLinkStatus, isDirectory, isSymbolicLink, setFileMode)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand, readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrentlyN_)
@@ -141,7 +145,7 @@ mergeFiles inputA inputB outputFile = do
     )
 
 syncMinimumState :: FilePath -> IO ()
-syncMinimumState depPath =
+syncMinimumState =
   syncSingleFile
     ( words
         ( "/etc/fstab /etc/crypttab /etc/locale.conf /etc/localtime "
@@ -149,10 +153,8 @@ syncMinimumState depPath =
             <> "/etc/NetworkManager/system-connections /etc/vconsole.conf /etc/pki "
             <> "/etc/firewalld /etc/environment /etc/hostname "
             <> "/etc/X11/xorg.conf.d/00-keyboard.conf /etc/sudoers /etc/hald /etc/machine-id "
-            <> "/etc/X11/xinit/xinput.d/ibus.conf"
         )
     )
-    (depPath <> "/")
 
 syncState :: Config.Config -> FilePath -> IO ()
 syncState conf depPath =
@@ -187,21 +189,46 @@ syncSingleFile files destination
       destExists <- doesDirectoryExist destination
       when destExists $ pooledForConcurrentlyN_ workThreads files $ \p ->
         catch
-          ( callCommand
-              ( "cp --parents -a  "
-                  <> p
-                  <> " "
-                  <> destination
-              )
-          )
+          (syncSingle p destination)
           ( \e ->
               let _ = show (e :: IOException)
                in Util.printInfo
-                    ( "Some required files couldn't be synchronized.\n"
+                    ( "Some required files couldn't be synchronized: "
+                        <> p
+                        <> "\n"
                         <> "Manual intervention might be necessary"
                     )
                     False
           )
+  where
+    syncSingle :: FilePath -> FilePath -> IO ()
+    syncSingle path target = do
+      stat <-
+        catch
+          (Just <$> getSymbolicLinkStatus path)
+          (\e -> let _ = show (e :: IOException) in return Nothing)
+      let fullTarget = target <> path
+      case stat of
+        Just x ->
+          if
+            | isDirectory x -> do
+                Util.ensureDirExists fullTarget
+                setFileMode fullTarget (fileMode x)
+                dirEntries <- listDirectory path
+                forM_ dirEntries $ \entry ->
+                  syncSingle (path </> entry) target
+            | isSymbolicLink x -> do
+                symTarget <- getSymbolicLinkTarget path
+                Util.ensureDirExists (takeDirectory fullTarget)
+                catch
+                  (createSymbolicLink symTarget fullTarget)
+                  ( \e ->
+                      if isAlreadyExistsError e then return () else ioError e
+                  )
+            | otherwise -> do
+                Util.ensureDirExists (takeDirectory fullTarget)
+                copyFileWithMetadata path fullTarget
+        Nothing -> void $ ioError (userError "Couldn't stat path!")
 
 syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
 syncDeploymentUsr containerMount conf dep linkSource =
