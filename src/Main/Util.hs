@@ -6,13 +6,12 @@ import Control.Concurrent.STM qualified as Stm
 import Control.Exception.Base (IOException, catch)
 import Control.Monad (forM, unless, when)
 import Data.ByteString.Char8 qualified as C
-import GHC.IO.Exception (ExitCode (ExitSuccess))
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
-import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT, sigTERM)
+import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (createSymbolicLink)
 import System.Process (callCommand, readProcess)
 
@@ -219,14 +218,18 @@ execWithSystemdInhibit =
   getArgs >>= \cmdArgs ->
     getExecutablePath >>= \execPath ->
       catch
-        ( callCommand
-            ( "systemd-inhibit --what=\"idle:sleep:shutdown\" --who=\"ald-rootful-ops\" "
-                <> "--why=\"Managing deployments\" -- "
-                <> execPath
-                <> " --skip-systemd-inhibit "
-                <> unwords cmdArgs
+        ( executeFile
+            "systemd-inhibit"
+            True
+            ( "--what=idle:sleep:shutdown"
+                : "--who=ald-rootful-ops"
+                : "--why=Managing deployments"
+                : "--"
+                : execPath
+                : "--skip-systemd-inhibit"
+                : cmdArgs
             )
-            >> exitImmediately ExitSuccess
+            Nothing
         )
         ( \e ->
             let _ = show (e :: IOException)
