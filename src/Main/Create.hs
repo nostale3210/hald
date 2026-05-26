@@ -15,7 +15,7 @@ import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, fin
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isAlreadyExistsError)
-import System.Posix (createSymbolicLink, fileMode, isDirectory, isSymbolicLink, modificationTime, setFileMode)
+import System.Posix (createSymbolicLink, fileMode, isDirectory, isSymbolicLink, modificationTime, setFileMode, setFileTimes)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callCommand, readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrentlyN_, pooledForConcurrently_)
@@ -285,16 +285,22 @@ syncDeploymentEtc containerMount conf dep = do
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
 normalizeDepEtcTimestamps conf dep = do
-  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
-  catch
-    ( callCommand
-        ( "find "
-            <> depPath
-            <> "/etc -mindepth 1 "
-            <> "-execdir sh -c \"touch -d 1970-01-01T01:00:00 '{}' >/dev/null 2>&1 || :\" \\;"
-        )
-    )
-    (\e -> hPutStrLn stderr ("Normalizing /etc timestamps failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
+  let depEtc = Config.haldPath conf </> show (Dep.identifier dep) <> "/etc"
+  etcExists <- doesDirectoryExist depEtc
+  when etcExists $
+    walk depEtc
+  where
+    walk dir = do
+      entries <- catch (listDirectory dir) (\e -> let _ = show (e :: IOException) in return [])
+      forM_ entries $ \entry -> do
+        let path = dir </> entry
+        stat <- Util.tryStat path
+        case stat of
+          Nothing -> return ()
+          Just s
+            | isDirectory s -> setFileTimes path 0 0 >> walk path
+            | isSymbolicLink s -> return ()
+            | otherwise -> setFileTimes path 0 0
 
 copyContainerFiles :: Config.Config -> Dep.Deployment -> IO ()
 copyContainerFiles conf dep = do
