@@ -7,11 +7,11 @@ import Control.Exception.Base (IOException, catch)
 import Control.Monad (forM, unless, when)
 import Data.ByteString.Char8 qualified as C
 import GHC.IO.Exception (ExitCode (ExitSuccess))
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory, (</>))
-import System.IO (hPutStrLn, stderr)
+import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 import System.Posix (exitImmediately, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (createSymbolicLink)
 import System.Process (callCommand, readProcess)
@@ -205,27 +205,14 @@ genericRootfulPreproc lockPath interactive inhibit = do
   return msgCont
 
 checkInteractive :: IO Bool
-checkInteractive =
-  catch
-    ( callCommand
-        "{ infocmp 2>/dev/null | grep -q smcup ; } && { infocmp 2>/dev/null | grep -q rmcup ; }"
-        >> return True
-    )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in return False
-    )
+checkInteractive = hIsTerminalDevice stdout
 
 checkSystemdInhibit :: IO Bool
-checkSystemdInhibit =
-  catch
-    ( callCommand "command -v systemd-inhibit >/dev/null 2>&1"
-        >> return True
-    )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in return False
-    )
+checkSystemdInhibit = do
+  r <- findExecutable "systemd-inhibit"
+  return $ case r of
+    Just _ -> True
+    Nothing -> False
 
 execWithSystemdInhibit :: IO ()
 execWithSystemdInhibit =

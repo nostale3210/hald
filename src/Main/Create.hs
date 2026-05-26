@@ -1,18 +1,18 @@
 module Main.Create where
 
 import Control.Exception (IOException, catch)
-import Control.Monad (when)
+import Control.Monad (void, when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
 import Main.CAS.Ingest qualified as CAS
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
-import System.Directory (copyFile, doesDirectoryExist, removeFile)
+import System.Directory (copyFile, doesDirectoryExist, findExecutable, removeFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (raiseSignal, sigTERM)
-import System.Process (callCommand)
+import System.Process (callCommand, readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrentlyN_)
 import UnliftIO.Concurrent (getNumCapabilities, threadDelay)
 
@@ -398,12 +398,11 @@ getPackageDB containerPath conf dep =
     )
 
 setDefaultBootEntry :: Int -> IO ()
-setDefaultBootEntry dep =
-  catch
-    ( callCommand
-        ("hash bootctl 2>/dev/null && bootctl set-default \"*" <> show dep <> "*\"")
-    )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in putStr ""
-    )
+setDefaultBootEntry dep = do
+  r <- findExecutable "bootctl"
+  case r of
+    Nothing -> return ()
+    Just _ ->
+      catch
+        (void $ readProcess "bootctl" ["set-default", "*" <> show dep <> "*"] "")
+        (\e -> let err = show (e :: IOException) in hPutStrLn stderr $ "Failed setting default boot entry: " <> err)
