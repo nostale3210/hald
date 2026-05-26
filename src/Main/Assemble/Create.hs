@@ -29,7 +29,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
     if up
       then do
         Util.printInfo "Attempting to pull latest container image..." (Util.interactive msgCont)
-        Container.pullImage (Config.containerUri conf)
+        Container.pullImage conf
       else return True
 
   existingDeps <- Dep.getDeploymentsInt conf
@@ -49,11 +49,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
             [] -> Nothing
             xs -> Just $ maximum xs
 
-      when build $
-        Container.buildImage
-          (Config.containerUri conf)
-          (Config.localTag conf)
-          (Config.configPath conf)
+      when build $ Container.buildImage conf
       let pbConf =
             if build
               then Config.applyConfigKey conf ["containerUri", Config.localTag conf]
