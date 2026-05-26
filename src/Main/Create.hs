@@ -175,8 +175,8 @@ collectFiles root = do
         case mStat of
           Nothing -> return ()
           Just s
-            | modificationTime s == 0 -> return ()
             | isDirectory s -> walk path ref
+            | modificationTime s == 0 -> return ()
             | otherwise ->
                 atomicModifyIORef' ref (\acc -> (path : acc, ()))
 
