@@ -17,7 +17,7 @@ import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isAlreadyExistsError)
 import System.Posix (createSymbolicLink, fileMode, isDirectory, isSymbolicLink, modificationTime, setFileMode, setFileTimes)
 import System.Posix.Signals (raiseSignal, sigTERM)
-import System.Process (callCommand, readProcess)
+import System.Process (readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrentlyN_, pooledForConcurrently_)
 import UnliftIO.Concurrent (threadDelay)
 
@@ -373,17 +373,16 @@ installUki conf deployment = do
   case Dep.ukiPath bootComps of
     Just x ->
       catch
-        ( callCommand
-            ( "ukify build --linux="
-                <> kernel
-                <> " --initrd="
-                <> initrd
-                <> " --cmdline='"
-                <> cmdline
-                <> "' --output="
-                <> x
-                <> " >/dev/null 2>&1"
-            )
+        ( void $
+            readProcess
+              "ukify"
+              [ "build",
+                "--linux=" <> kernel,
+                "--initrd=" <> initrd,
+                "--cmdline=" <> cmdline,
+                "--output=" <> x
+              ]
+              ""
         )
         ( \e -> hPutStrLn stderr ("ukify build failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound
         )
@@ -402,16 +401,14 @@ getPackageDB containerPath conf dep =
             <> "/"
             <> takeDirectory (fromMaybe "" (Config.packageDB conf))
         )
-        >> callCommand
-          ( "rsync -a "
-              <> containerPath
-              <> fromMaybe "" (Config.packageDB conf)
-              <> " "
-              <> fromMaybe "" (Dep.rootDir dep)
-              <> "/"
-              <> takeDirectory (fromMaybe "" (Config.packageDB conf))
-              <> "/"
-          )
+        >> readProcess
+          "rsync"
+          [ "-a",
+            containerPath <> fromMaybe "" (Config.packageDB conf),
+            fromMaybe "" (Dep.rootDir dep) <> "/" <> takeDirectory (fromMaybe "" (Config.packageDB conf)) <> "/"
+          ]
+          ""
+        >> return ()
     )
     ( \e ->
         let _ = show (e :: IOException)

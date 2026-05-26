@@ -1,10 +1,10 @@
 module Main.Util where
 
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent (forkIO, getNumCapabilities, threadDelay)
 import Control.Concurrent qualified as Conc
 import Control.Concurrent.STM qualified as Stm
 import Control.Exception.Base (IOException, catch)
-import Control.Monad (forM, unless, when)
+import Control.Monad (forM, unless, void, when)
 import Data.ByteString.Char8 qualified as C
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory)
 import System.Environment (getArgs, getExecutablePath)
@@ -13,7 +13,7 @@ import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus)
-import System.Process (callCommand, readProcess)
+import System.Process (readProcess)
 
 data MessageContainer
   = MessageContainer {interactive :: Bool, channel :: Stm.TChan String}
@@ -108,41 +108,28 @@ recursiveFileSearch rootDir fileName = do
             else return []
 
 relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
-relabelSeLinuxPath rootPath contexts bp =
-  do
-    catch
-      ( callCommand
-          ( "restorecon -RF "
-              <> bp
-          )
-      )
-      ( \e ->
-          let _ = show (e :: IOException)
-           in hPutStrLn stderr "Relabeling boot directory failed."
-                >> raiseSignal sigTERM
-                >> threadDelay maxBound
-      )
-    catch
-      ( callCommand
-          ( "ln -sf usr/lib "
-              <> rootPath
-              <> "/lib && "
-              <> "ln -sf usr/lib64 "
-              <> rootPath
-              <> "/lib64 && "
-              <> "chroot "
-              <> rootPath
-              <> " /usr/bin/setfiles -F -T \"$(($(nproc --all)/2))\" "
-              <> contexts
-              <> " / 2>/dev/null || :"
-          )
-      )
-      ( \e ->
-          let _ = show (e :: IOException)
-           in hPutStrLn stderr "Relabeling root directory failed."
-                >> raiseSignal sigTERM
-                >> threadDelay maxBound
-      )
+relabelSeLinuxPath rootPath contexts bp = do
+  catch
+    (void $ readProcess "restorecon" ["-RF", bp] "")
+    ( \e ->
+        let _ = show (e :: IOException)
+         in hPutStrLn stderr "Relabeling boot directory failed."
+              >> raiseSignal sigTERM
+              >> threadDelay maxBound
+    )
+  catch
+    ( do
+        createSymlink "usr/lib" (rootPath <> "/lib")
+        createSymlink "usr/lib64" (rootPath <> "/lib64")
+        threads <- getNumCapabilities
+        void $ readProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
+    )
+    ( \e ->
+        let _ = show (e :: IOException)
+         in hPutStrLn stderr "Relabeling root directory failed."
+              >> raiseSignal sigTERM
+              >> threadDelay maxBound
+    )
 
 getUserId :: IO Int
 getUserId =
@@ -172,10 +159,7 @@ signKernel bp dep target =
         ( if kernelExists
             then
               catch
-                ( callCommand
-                    ("sbctl sign " <> kernelPath <> " >/dev/null 2>&1")
-                    >> return True
-                )
+                (readProcess "sbctl" ["sign", kernelPath] "" >> return True)
                 ( \e ->
                     let _ = show (e :: IOException)
                      in return False
