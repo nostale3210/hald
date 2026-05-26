@@ -243,14 +243,14 @@ syncDeploymentUsrCas containerMount conf dep = do
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
   let depPath = Config.haldPath conf </> show (Dep.identifier dep)
+      depEtc = depPath <> "/etc"
+  Util.ensureDirExists depEtc
   catch
-    ( callCommand
-        ( "rsync -aHlx "
-            <> containerMount
-            <> "/etc/ "
-            <> depPath
-            <> "/etc/"
-        )
+    ( void $
+        readProcess
+          "cp"
+          ["-a", containerMount <> "/etc/.", depEtc <> "/."]
+          ""
     )
     (\e -> hPutStrLn stderr ("Syncing deployment /etc failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
 
