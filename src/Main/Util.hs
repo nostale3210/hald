@@ -12,6 +12,7 @@ import System.Exit (ExitCode (..))
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
+import System.IO.Error (isAlreadyExistsError)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus)
 import System.Process (CreateProcess (..), StdStream (NoStream), proc, readCreateProcessWithExitCode, readProcess)
@@ -75,11 +76,14 @@ createSymlink target link =
   catch
     (createSymbolicLink target link)
     ( \e ->
-        let err = show (e :: IOException)
-         in printInfo
-              ( "Couldn't create symlink from " <> target <> " to " <> link <> "; " <> err
-              )
-              False
+        if isAlreadyExistsError e
+          then return ()
+          else
+            let err = show (e :: IOException)
+             in printInfo
+                  ( "Couldn't create symlink from " <> target <> " to " <> link <> "; " <> err
+                  )
+                  False
     )
 
 isMountpoint :: FilePath -> IO Bool
@@ -133,7 +137,9 @@ relabelSeLinuxPath rootPath contexts bp = do
         createSymlink "usr/lib" (rootPath <> "/lib")
         createSymlink "usr/lib64" (rootPath <> "/lib64")
         threads <- getNumCapabilities
-        void $ quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
+        catch
+          (void $ quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] "")
+          (\e -> let _ = show (e :: IOException) in return ())
     )
     ( \e ->
         let _ = show (e :: IOException)
