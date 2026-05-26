@@ -241,11 +241,11 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
   let depPath = Config.haldPath conf </> show (Dep.identifier dep)
       depUsr = depPath <> "/usr"
   Util.ensureDirExists depUsr
-  let rsyncBase = "rsync -aHlx " <> containerMount <> "/usr/ " <> depUsr <> "/"
+  let rsyncArgs = ["-aHlx", containerMount <> "/usr/", depUsr <> "/"]
       rsyncCmd = case linkSource of
-        Just src -> rsyncBase <> " --link-dest=../../" <> show src <> "/usr"
-        Nothing -> rsyncBase
-  catch (callCommand rsyncCmd) (\e -> hPutStrLn stderr ("Syncing deployment /usr failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
+        Just src -> rsyncArgs <> ["--link-dest=../../" <> show src <> "/usr"]
+        Nothing -> rsyncArgs
+  catch (void $ readProcess "rsync" rsyncCmd "") (\e -> hPutStrLn stderr ("Syncing deployment /usr failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
   catch
     (writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep)))
     (\e -> hPutStrLn stderr ("Writing deployment marker failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
