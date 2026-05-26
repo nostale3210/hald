@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
-
 module Main.Create where
 
 import Control.Exception (IOException, catch)
@@ -206,25 +204,24 @@ syncSingle path target = do
   stat <- Util.tryStat path
   let fullTarget = target <> path
   case stat of
-    Just x ->
-      if
-        | isDirectory x -> do
-            Util.ensureDirExists fullTarget
-            setFileMode fullTarget (fileMode x)
-            dirEntries <- listDirectory path
-            forM_ dirEntries $ \entry ->
-              syncSingle (path </> entry) target
-        | isSymbolicLink x -> do
-            symTarget <- getSymbolicLinkTarget path
-            Util.ensureDirExists (takeDirectory fullTarget)
-            catch
-              (createSymbolicLink symTarget fullTarget)
-              ( \e ->
-                  if isAlreadyExistsError e then return () else ioError e
-              )
-        | otherwise -> do
-            Util.ensureDirExists (takeDirectory fullTarget)
-            copyFileWithMetadata path fullTarget
+    Just x
+      | isDirectory x -> do
+          Util.ensureDirExists fullTarget
+          setFileMode fullTarget (fileMode x)
+          dirEntries <- listDirectory path
+          forM_ dirEntries $ \entry ->
+            syncSingle (path </> entry) target
+      | isSymbolicLink x -> do
+          symTarget <- getSymbolicLinkTarget path
+          Util.ensureDirExists (takeDirectory fullTarget)
+          catch
+            (createSymbolicLink symTarget fullTarget)
+            ( \e ->
+                if isAlreadyExistsError e then return () else ioError e
+            )
+      | otherwise -> do
+          Util.ensureDirExists (takeDirectory fullTarget)
+          copyFileWithMetadata path fullTarget
     Nothing -> void $ ioError (userError "Couldn't stat path!")
 
 syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
