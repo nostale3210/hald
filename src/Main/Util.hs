@@ -3,9 +3,10 @@ module Main.Util where
 import Control.Concurrent (forkIO, getNumCapabilities, threadDelay)
 import Control.Concurrent qualified as Conc
 import Control.Concurrent.STM qualified as Stm
-import Control.Exception (IOException, catch)
-import Control.Monad (forM, forM_, unless, void, when)
+import Control.Exception (IOException, catch, handle, try)
+import Control.Monad (forM, forM_, forever, unless, void, when)
 import Data.ByteString.Char8 qualified as C
+import Data.Either (fromRight)
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory, removeFile)
 import System.Environment (getArgs, getExecutablePath)
 import System.Exit (ExitCode (..))
@@ -64,10 +65,7 @@ newIdentifier idents =
     _ : _ -> succ $ maximum idents
 
 pathExists :: FilePath -> IO Bool
-pathExists path =
-  catch
-    (doesPathExist path)
-    (\e -> let _ = show (e :: IOException) in return False)
+pathExists path = ioOrDefault False $ doesPathExist path
 
 ensureDirExists :: FilePath -> IO ()
 ensureDirExists dir =
@@ -87,12 +85,7 @@ createSymlink target link = do
 
 isMountpoint :: FilePath -> IO Bool
 isMountpoint path =
-  catch
-    (quietReadProcess "mountpoint" ["-q", path] "" >> return True)
-    ( \e ->
-        let _ = show (e :: IOException)
-         in return False
-    )
+  ioOrDefault False $ quietReadProcess "mountpoint" ["-q", path] "" >> return True
 
 quietReadProcess :: FilePath -> [String] -> String -> IO String
 quietReadProcess cmd args input = do
@@ -120,19 +113,16 @@ recursiveFileSearch rootDir fileName = do
 
 relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
 relabelSeLinuxPath rootPath contexts bp = do
-  catch
-    (void $ quietReadProcess "restorecon" ["-RF", bp] "")
-    (\(_ :: IOException) -> fatal "Relabeling boot directory failed.")
-  catch
-    ( do
-        createSymlink "usr/lib" (rootPath <> "/lib")
-        createSymlink "usr/lib64" (rootPath <> "/lib64")
-        threads <- getNumCapabilities
-        catch
-          (void $ quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] "")
-          (\e -> let _ = show (e :: IOException) in return ())
-    )
-    (\(_ :: IOException) -> fatal "Relabeling root directory failed.")
+  ioOrDie "Relabeling boot directory" $
+    void $
+      quietReadProcess "restorecon" ["-RF", bp] ""
+  ioOrDie "Relabeling root directory" $ do
+    createSymlink "usr/lib" (rootPath <> "/lib")
+    createSymlink "usr/lib64" (rootPath <> "/lib64")
+    threads <- getNumCapabilities
+    ioOrPass $
+      void $
+        quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
 
 getUserId :: IO Int
 getUserId =
@@ -159,17 +149,12 @@ signKernel :: FilePath -> Int -> FilePath -> IO Bool
 signKernel bp dep target =
   let kernelPath = bp </> show dep <> target
    in pathExists kernelPath >>= \kernelExists ->
-        ( if kernelExists
-            then
-              catch
-                (quietReadProcess "sbctl" ["sign", kernelPath] "" >> return True)
-                ( \e ->
-                    let _ = show (e :: IOException)
-                     in return False
-                )
-            else
+        if kernelExists
+          then
+            ioOrDefault False $
+              quietReadProcess "sbctl" ["sign", kernelPath] "" >> return True
+          else
             fatalWith ("Kernel for deployment " <> show dep <> " doesn't seem to exist.") False
-        )
 
 genericRootfulPreproc :: FilePath -> Bool -> Bool -> IO MessageContainer
 genericRootfulPreproc lockPath interactive inhibit = do
@@ -222,10 +207,7 @@ execWithSystemdInhibit =
 
 setSystemThreads :: Int -> IO ()
 setSystemThreads maxThreads = do
-  nproc <-
-    catch
-      (readProcess "nproc" [] "")
-      (\e -> let _ = (e :: IOException) in return "1")
+  nproc <- ioOrDefault "1" $ readProcess "nproc" [] ""
   let threads = read nproc :: Int
   Conc.setNumCapabilities $ min threads maxThreads
 
@@ -250,20 +232,31 @@ printChannelMsg channel bar = do
   when channelEmpty (Stm.atomically $ Stm.unGetTChan channel status)
   printChannelMsg channel (C.append (C.tail bar) (C.pack [C.head bar]))
 
-fatal :: String -> IO ()
-fatal msg = hPutStrLn stderr msg >> raiseSignal sigTERM >> threadDelay maxBound
+fatal :: String -> IO a
+fatal msg = hPutStrLn stderr msg >> raiseSignal sigTERM >> forever (threadDelay maxBound)
 
 fatalWith :: String -> a -> IO a
-fatalWith msg x = hPutStrLn stderr msg >> raiseSignal sigTERM >> threadDelay maxBound >> return x
+fatalWith msg _ = fatal msg
+
+ioOrDie :: String -> IO a -> IO a
+ioOrDie desc = handle handler
+  where
+    handler (e :: IOException) = fatal $ desc <> ": " <> show e
+
+ioOrPass :: IO a -> IO ()
+ioOrPass = void . try @IOException
+
+safeCall :: IO a -> IO (Maybe a)
+safeCall = fmap (either (const Nothing) Just) . try @IOException
+
+ioOrDefault :: a -> IO a -> IO a
+ioOrDefault def action = fromRight def <$> try @IOException action
 
 listDirSafe :: FilePath -> IO [FilePath]
-listDirSafe dir = catch (listDirectory dir) (\(_ :: IOException) -> return [])
+listDirSafe dir = ioOrDefault [] $ listDirectory dir
 
 tryStat :: FilePath -> IO (Maybe FileStatus)
-tryStat path =
-  catch
-    (Just <$> getSymbolicLinkStatus path)
-    (\e -> let _ = show (e :: IOException) in return Nothing)
+tryStat = safeCall . getSymbolicLinkStatus
 
 walk :: WalkStrategy -> TreeAction -> FilePath -> IO ()
 walk strategy action = dispatch

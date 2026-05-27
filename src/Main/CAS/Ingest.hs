@@ -7,7 +7,6 @@ module Main.CAS.Ingest
   )
 where
 
-import Control.Exception (IOException, catch)
 import Control.Monad (forM, forM_, unless)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as B8
@@ -74,9 +73,7 @@ doHash srcPath casDir = do
   Lock.setMutable destDir
   destExists <- doesFileExist destPath
   unless destExists $ do
-    catch
-      (copyFile srcPath destPath)
-      (\e -> let _ = show (e :: IOException) in return ())
+    Util.ioOrPass $ copyFile srcPath destPath
     Lock.setImmutable destPath
   return (prefix </> hashStr)
 

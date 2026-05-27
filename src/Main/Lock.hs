@@ -62,22 +62,13 @@ instance Show RecursiveUmount where
   show Fl = "fl"
 
 setImmutable :: FilePath -> IO ()
-setImmutable fp =
-  catch
-    (setFileFlag fp fsImmutableFl)
-    (\e -> let _ = show (e :: IOException) in return ())
+setImmutable fp = Util.ioOrPass $ setFileFlag fp fsImmutableFl
 
 setMutable :: FilePath -> IO ()
-setMutable fp =
-  catch
-    (setFileFlag fp 0)
-    (\e -> let _ = show (e :: IOException) in return ())
+setMutable fp = Util.ioOrPass $ setFileFlag fp 0
 
 clearRecursiveImmutable :: FilePath -> IO ()
-clearRecursiveImmutable fp =
-  catch
-    (Util.walk (ParallelN 4) action fp)
-    (\e -> let _ = show (e :: IOException) in return ())
+clearRecursiveImmutable fp = Util.ioOrPass $ Util.walk (ParallelN 4) action fp
   where
     action =
       TreeAction
@@ -118,15 +109,9 @@ roRemountDir readMode dirPath =
     )
 
 umountDirForcibly :: RecursiveUmount -> FilePath -> IO ()
-umountDirForcibly opts dirPath =
-  catch
-    ( do
-        mounted <- Util.isMountpoint dirPath
-        when mounted $
-          void $
-            readProcess "umount" ["-" <> show opts, dirPath] ""
-    )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in return ()
-    )
+umountDirForcibly opts dirPath = do
+  mounted <- Util.isMountpoint dirPath
+  when mounted $
+    Util.ioOrPass $
+      void $
+        readProcess "umount" ["-" <> show opts, dirPath] ""

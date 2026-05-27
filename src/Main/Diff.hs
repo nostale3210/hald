@@ -5,6 +5,7 @@ module Main.Diff where
 import Control.Exception (IOException, catch)
 import Data.Char (isSpace)
 import Data.List (sort, sortBy)
+import Data.Maybe (fromMaybe)
 import Data.Maybe qualified
 import Data.Ord (Down (..), comparing)
 import Main.Config qualified as Config
@@ -61,11 +62,9 @@ printDiff from to conf =
 getStatus :: Int -> Config.Config -> IO String
 getStatus dep conf = do
   fullDep <- Dep.getDeployment dep conf
-  let root = Data.Maybe.fromMaybe "" (Dep.rootDir fullDep)
+  let root = fromMaybe "" (Dep.rootDir fullDep)
       PkgQuery cmd args post = listCmd (Config.packageManager conf) root
-  catch
-    (post <$> Util.quietReadProcess cmd args "")
-    (\e -> let _ = show (e :: IOException) in return "")
+  Util.ioOrDefault "" $ post <$> Util.quietReadProcess cmd args ""
 
 data PkgQuery = PkgQuery
   { pqCmd :: FilePath,

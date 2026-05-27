@@ -33,17 +33,13 @@ createBootEntry depId conf = do
   if bootTemplateExists
     then do
       templateContent <-
-        catch
-          ( readFile $
-              Config.configPath conf <> "/boot.conf"
-          )
-          (\e -> Util.fatalWith (show (e :: IOException)) "")
-      catch
-        ( writeFile
-            (Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf")
-            (generateBootEntry depId templateContent)
-        )
-        (\e -> Util.fatal $ "Couldn't create boot entry!\n" <> show (e :: IOException))
+        Util.ioOrDie "Reading boot entry template" $
+          readFile $
+            Config.configPath conf <> "/boot.conf"
+      Util.ioOrDie "Creating boot entry" $
+        writeFile
+          (Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf")
+          (generateBootEntry depId templateContent)
     else Util.fatal $ "No boot entry template found, make sure it exists at " <> Config.configPath conf <> "/boot.conf"
 
 generateBootEntry :: Int -> String -> String
@@ -55,13 +51,10 @@ syncSystemConfig dropState conf dep = do
   if dropState
     then syncMinimumState depPath
     else syncState depPath
-  catch
-    ( do
-        void $ readProcess "podman" ["cp", "ald-root:/etc/passwd", depPath <> "/.tmp.passwd"] ""
-        void $ readProcess "podman" ["cp", "ald-root:/etc/shadow", depPath <> "/.tmp.shadow"] ""
-        void $ readProcess "podman" ["cp", "ald-root:/etc/group", depPath <> "/.tmp.group"] ""
-    )
-    (\e -> Util.fatal $ "Couldn't sync system config!\n" <> show (e :: IOException))
+  Util.ioOrDie "Syncing system config" $ do
+    void $ readProcess "podman" ["cp", "ald-root:/etc/passwd", depPath <> "/.tmp.passwd"] ""
+    void $ readProcess "podman" ["cp", "ald-root:/etc/shadow", depPath <> "/.tmp.shadow"] ""
+    void $ readProcess "podman" ["cp", "ald-root:/etc/group", depPath <> "/.tmp.group"] ""
   mergeFiles "/etc/passwd" (depPath <> "/.tmp.passwd") (depPath <> "/etc/passwd")
     >> removeTmpFile (depPath <> "/.tmp.passwd")
   mergeFiles "/etc/shadow" (depPath <> "/.tmp.shadow") (depPath <> "/etc/shadow")
@@ -83,22 +76,14 @@ removeTmpFile file =
 
 mergeFiles :: FilePath -> FilePath -> FilePath -> IO ()
 mergeFiles inputA inputB outputFile = do
-  contentA <-
-    catch
-      (readFile inputA)
-      (\(_ :: IOException) -> Util.fatalWith "Failed to merge files!" "")
-  contentB <-
-    catch
-      (readFile inputB)
-      (\(_ :: IOException) -> Util.fatalWith "Failed to merge files!" "")
+  contentA <- Util.ioOrDie "Reading merge file A" $ readFile inputA
+  contentB <- Util.ioOrDie "Reading merge file B" $ readFile inputB
   let output =
         unlines
           . nubBy (\a b -> Util.takeUntil a ':' == Util.takeUntil b ':')
           . lines
           $ contentA <> contentB
-  catch
-    (writeFile outputFile output)
-    (\(_ :: IOException) -> Util.fatal "Failed to merge files!")
+  Util.ioOrDie "Writing merged file" $ writeFile outputFile output
 
 syncMinimumState :: FilePath -> IO ()
 syncMinimumState =
@@ -195,10 +180,9 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
       rsyncCmd = case linkSource of
         Just src -> rsyncArgs <> ["--link-dest=../../" <> show src <> "/usr"]
         Nothing -> rsyncArgs
-  catch (void $ readProcess "rsync" rsyncCmd "") (\e -> Util.fatal $ "Syncing deployment /usr failed: " <> show (e :: IOException))
-  catch
-    (writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep)))
-    (\e -> Util.fatal $ "Writing deployment marker failed: " <> show (e :: IOException))
+  Util.ioOrDie "Syncing deployment /usr" $ void $ readProcess "rsync" rsyncCmd ""
+  Util.ioOrDie "Writing deployment marker" $
+    writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep))
 
 syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentUsrCas containerMount conf dep = do
@@ -210,12 +194,8 @@ syncDeploymentUsrCas containerMount conf dep = do
   Util.ensureDirExists depUsr
   CAS.ingestTree (containerMount <> "/usr") casDir assetMapPath
   CAS.deployTreeFromFile casDir depUsr assetMapPath
-  catch
-    ( writeFile
-        (depPath <> "/usr/.ald_dep")
-        (show (Dep.identifier dep))
-    )
-    (\e -> Util.fatal $ "Writing deployment marker failed: " <> show (e :: IOException))
+  Util.ioOrDie "Writing deployment marker" $
+    writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep))
 
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
@@ -223,9 +203,7 @@ syncDeploymentEtc containerMount conf dep = do
       depEtc = depPath <> "/etc"
       containerEtc = containerMount <> "/etc"
   Util.ensureDirExists depEtc
-  catch
-    (copyTree containerEtc depEtc)
-    (\e -> Util.fatal $ "Syncing deployment /etc failed: " <> show (e :: IOException))
+  Util.ioOrDie "Syncing deployment /etc" $ copyTree containerEtc depEtc
 
 copyTree :: FilePath -> FilePath -> IO ()
 copyTree src dst =
@@ -305,11 +283,9 @@ installUki conf deployment = do
       (modulePathSearch conf deployment "vmlinuz")
       (modulePathSearch conf deployment "initramfs.img")
   templCmdline <-
-    catch
-      ( readFile $
-          Config.configPath conf <> "/cmdline"
-      )
-      (\e -> Util.fatalWith (show (e :: IOException)) "")
+    Util.ioOrDie "Reading UKI cmdline" $
+      readFile $
+        Config.configPath conf <> "/cmdline"
   let cmdline =
         Util.removeString "\n" $
           Util.replaceString
@@ -320,41 +296,37 @@ installUki conf deployment = do
   let bootComps = Dep.bootComponents deployment
   case Dep.ukiPath bootComps of
     Just x ->
-      catch
-        ( void $
-            Util.quietReadProcess
-              "ukify"
-              [ "build",
-                "--linux=" <> kernel,
-                "--initrd=" <> initrd,
-                "--cmdline=" <> cmdline,
-                "--output=" <> x
-              ]
-              ""
-        )
-        (\e -> Util.fatal $ "ukify build failed: " <> show (e :: IOException))
+      Util.ioOrDie "Building UKI" $
+        void $
+          Util.quietReadProcess
+            "ukify"
+            [ "build",
+              "--linux=" <> kernel,
+              "--initrd=" <> initrd,
+              "--cmdline=" <> cmdline,
+              "--output=" <> x
+            ]
+            ""
     Nothing -> Util.fatal $ "No UKI path supplied for deployment " <> show (Dep.identifier deployment)
 
 getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 getPackageDB containerPath conf dep =
-  catch
-    ( Util.ensureDirExists
-        ( Config.haldPath conf
-            <> "/"
-            <> show (Dep.identifier dep)
-            <> "/"
-            <> takeDirectory (fromMaybe "" (Config.packageDB conf))
-        )
-        >> readProcess
-          "rsync"
-          [ "-a",
-            containerPath <> fromMaybe "" (Config.packageDB conf),
-            fromMaybe "" (Dep.rootDir dep) <> "/" <> takeDirectory (fromMaybe "" (Config.packageDB conf)) <> "/"
-          ]
-          ""
-        >> return ()
-    )
-    (\(_ :: IOException) -> Util.fatal "Failed fetching package db!")
+  Util.ioOrDie "Fetching package database" $
+    Util.ensureDirExists
+      ( Config.haldPath conf
+          <> "/"
+          <> show (Dep.identifier dep)
+          <> "/"
+          <> takeDirectory (fromMaybe "" (Config.packageDB conf))
+      )
+      >> readProcess
+        "rsync"
+        [ "-a",
+          containerPath <> fromMaybe "" (Config.packageDB conf),
+          fromMaybe "" (Dep.rootDir dep) <> "/" <> takeDirectory (fromMaybe "" (Config.packageDB conf)) <> "/"
+        ]
+        ""
+      >> return ()
 
 setDefaultBootEntry :: Int -> IO ()
 setDefaultBootEntry dep = do

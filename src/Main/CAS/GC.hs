@@ -1,6 +1,5 @@
 module Main.CAS.GC (collectGarbage, restoreStoreFlags) where
 
-import Control.Exception (IOException, catch)
 import Control.Monad (unless, when)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Set qualified as Set
@@ -67,9 +66,7 @@ collectGarbage conf keptDepIds = do
             let ino = (deviceID stat, fileID stat)
             unless (ino `Set.member` refSet) $ do
               Lock.setMutable casObj
-              catch
-                (removeFile casObj)
-                (\e -> let _ = show (e :: IOException) in return ())
+              Util.ioOrPass $ removeFile casObj
           Nothing -> return ()
   removeEmptyDirectories casDir
 
@@ -81,7 +78,8 @@ removeEmptyDirectories = Util.walk (ParallelN 2) action
         { dirAction = \d _ -> do
             contents <- listDirectory d
             when (null contents) $
-              catch (removeDirectory d) (\e -> let _ = show (e :: IOException) in return ()),
+              Util.ioOrPass $
+                removeDirectory d,
           symAction = \_ _ -> return (),
           fileAction = \_ _ -> return ()
         }

@@ -16,45 +16,43 @@ getNewRoot nextDep =
 
 delegateMount :: FilePath -> FilePath -> IO ()
 delegateMount fromPath toPath =
-  catch
-    (void $ Util.quietReadProcess "move-mount" ["-db", fromPath, toPath] "")
-    (\e -> Util.fatal $ show (e :: IOException))
+  Util.ioOrDie "Delegating mount" $
+    void $
+      Util.quietReadProcess "move-mount" ["-db", fromPath, toPath] ""
 
 moveOMount :: FilePath -> FilePath -> IO ()
 moveOMount fromPath toPath =
-  catch
-    (void $ Util.quietReadProcess "move-mount" ["-mb", fromPath, toPath] "")
-    (\e -> Util.fatal $ show (e :: IOException))
+  Util.ioOrDie "Moving mount" $
+    void $
+      Util.quietReadProcess "move-mount" ["-mb", fromPath, toPath] ""
 
 usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
 usrOverlayMount hp fromPath toPath =
-  catch
-    ( void $
-        readProcess
-          "mount"
-          [ "-t",
-            "overlay",
-            "usr-root",
-            "--make-private",
-            "-o",
-            "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
-            toPath
-          ]
-          ""
-    )
-    (\e -> Util.fatal $ show (e :: IOException))
+  Util.ioOrDie "Mounting overlay usr" $
+    void $
+      readProcess
+        "mount"
+        [ "-t",
+          "overlay",
+          "usr-root",
+          "--make-private",
+          "-o",
+          "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
+          toPath
+        ]
+        ""
 
 privateMount :: FilePath -> IO ()
 privateMount path =
-  catch
-    (void $ readProcess "mount" ["--make-private", path] "")
-    (\e -> Util.fatal $ show (e :: IOException))
+  Util.ioOrDie "Making mount private" $
+    void $
+      readProcess "mount" ["--make-private", path] ""
 
 bindMount :: FilePath -> FilePath -> IO ()
 bindMount fromPath toPath =
-  catch
-    (void $ readProcess "mount" ["-o", "bind", "--make-private", fromPath, toPath] "")
-    (\e -> Util.fatal $ show (e :: IOException))
+  Util.ioOrDie "Binding mount" $
+    void $
+      readProcess "mount" ["-o", "bind", "--make-private", fromPath, toPath] ""
 
 activateNewRoot :: FilePath -> FilePath -> Dep.Deployment -> IO ()
 activateNewRoot root hp newDep = do

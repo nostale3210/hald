@@ -8,12 +8,8 @@ import System.Process (callProcess, readProcess)
 
 mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
-  catch
-    (void $ Util.quietReadProcess "podman" ["create", "--replace", "--name", podName, podUri] "")
-    (\e -> Util.fatal $ "Creating container failed: " <> show (e :: IOException))
-    >> catch
-      (readProcess "podman" ["mount", "ald-root"] [])
-      (\e -> Util.fatalWith ("Mounting container failed: " <> show (e :: IOException)) "failed")
+  Util.ioOrDie "Creating container" (void $ Util.quietReadProcess "podman" ["create", "--replace", "--name", podName, podUri] "")
+    >> Util.ioOrDie "Mounting container" (readProcess "podman" ["mount", "ald-root"] [])
     >>= \podMount -> return $ Util.removeString "\n" podMount
 
 umountContainer :: String -> IO ()
@@ -36,39 +32,32 @@ rmContainer podName =
 
 buildImage :: Config.Config -> IO ()
 buildImage conf =
-  catch
-    ( do
-        Util.printInfo "Building custom container image..." (Config.interactive conf)
-        callProcess
-          "podman"
-          [ "build",
-            "--isolation=chroot",
-            "--build-arg=SOURCE_IMAGE=" <> Config.containerUri conf,
-            "-t",
-            Config.localTag conf,
-            Config.configPath conf
-          ]
-        Util.printInfo "Container build completed." (Config.interactive conf)
-    )
-    (\e -> Util.fatal $ "Building image failed: " <> show (e :: IOException))
+  Util.ioOrDie "Building container image" $ do
+    Util.printInfo "Building custom container image..." (Config.interactive conf)
+    callProcess
+      "podman"
+      [ "build",
+        "--isolation=chroot",
+        "--build-arg=SOURCE_IMAGE=" <> Config.containerUri conf,
+        "-t",
+        Config.localTag conf,
+        Config.configPath conf
+      ]
+    Util.printInfo "Container build completed." (Config.interactive conf)
 
 pullImage :: Config.Config -> IO Bool
 pullImage conf = do
   let uri = Config.containerUri conf
   curDigest <-
-    catch
-      (readProcess "podman" ["inspect", "--format", "'{{.Digest}}'", uri] [])
-      (\e -> let _ = show (e :: IOException) in return "")
+    Util.ioOrDefault "" $
+      readProcess "podman" ["inspect", "--format", "'{{.Digest}}'", uri] []
   upstrDigest <-
-    catch
-      (readProcess "skopeo" ["inspect", "--format", "'{{.Digest}}'", "docker://" <> uri] [])
-      (\e -> let _ = show (e :: IOException) in return "")
+    Util.ioOrDefault "" $
+      readProcess "skopeo" ["inspect", "--format", "'{{.Digest}}'", "docker://" <> uri] []
   if curDigest == upstrDigest
     then Util.printInfo "Latest image already pulled" (Config.interactive conf) >> return False
     else do
       Util.printInfo ("Pulling image " <> uri <> "...") (Config.interactive conf)
-      catch
-        (callProcess "podman" ["pull", uri])
-        (\e -> Util.fatal $ "Pulling image failed: " <> show (e :: IOException))
+      Util.ioOrDie "Pulling image" $ callProcess "podman" ["pull", uri]
       Util.printInfo "Image pull completed." (Config.interactive conf)
       return True
