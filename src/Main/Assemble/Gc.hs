@@ -1,6 +1,8 @@
 module Main.Assemble.Gc where
 
 import Control.Exception (onException)
+import Control.Monad (when)
+import Data.List (sort)
 import Main.CAS.GC qualified as CasGc
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
@@ -27,5 +29,7 @@ deploymentGcAssembly conf msgCont = do
   newAllDeps <- Dep.getDeploymentsInt conf
   Space.rmDeps (Config.keepDeps conf) newAllDeps conf
   remainingDeps <- Dep.getDeploymentsInt conf
-  CasGc.collectGarbage conf remainingDeps
+  when (sort allDeps /= sort remainingDeps) $ do
+    CasGc.collectGarbage conf remainingDeps
+    CasGc.restoreStoreFlags conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

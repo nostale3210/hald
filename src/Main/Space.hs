@@ -9,6 +9,7 @@ import Main.Lock qualified as Lock
 import Main.Util qualified as Util
 import System.Directory (removePathForcibly)
 import System.FilePath ((</>))
+import UnliftIO.Async (pooledForConcurrently_)
 
 rmDep :: Dep.Deployment -> Config.Config -> IO ()
 rmDep deployment conf = do
@@ -59,16 +60,13 @@ rmComponent ident conf component path =
         (Config.interactive conf)
 
 rmDeps :: Int -> [Int] -> Config.Config -> IO ()
-rmDeps keepDeps deployments conf
-  | keepDeps < length deployments =
-      case sort deployments of
-        [] -> return ()
-        x : xs -> do
-          tbRmDep <-
-            Dep.getDeployment x conf
-          rmDep tbRmDep conf
-          rmDeps keepDeps xs conf
-  | otherwise = return ()
+rmDeps keepDeps deployments conf = do
+  let sorted = sort deployments
+      numToRemove = length sorted - keepDeps
+  when (numToRemove > 0) $
+    pooledForConcurrently_ (take numToRemove sorted) $ \depId -> do
+      tbRmDep <- Dep.getDeployment depId conf
+      rmDep tbRmDep conf
 
 gcBroken :: [Int] -> Config.Config -> IO ()
 gcBroken depIds conf =

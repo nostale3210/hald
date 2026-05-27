@@ -76,7 +76,7 @@ setMutable fp =
 clearRecursiveImmutable :: FilePath -> IO ()
 clearRecursiveImmutable fp =
   catch
-    (Util.walk Sequential action fp)
+    (Util.walk (ParallelN 4) action fp)
     (\e -> let _ = show (e :: IOException) in return ())
   where
     action =

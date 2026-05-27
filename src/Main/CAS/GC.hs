@@ -72,7 +72,6 @@ collectGarbage conf keptDepIds = do
                 (\e -> let _ = show (e :: IOException) in return ())
           Nothing -> return ()
   removeEmptyDirectories casDir
-  restoreStoreFlags conf
 
 removeEmptyDirectories :: FilePath -> IO ()
 removeEmptyDirectories = Util.walk (ParallelN 2) action

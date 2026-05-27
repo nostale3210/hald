@@ -112,5 +112,5 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
 
       when gc $ performGC >> Asgc.deploymentGcAssembly pbConf msgCont
 
-      CasGc.restoreStoreFlags pbConf
+      unless gc $ CasGc.restoreStoreFlags pbConf
       Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath pbConf
