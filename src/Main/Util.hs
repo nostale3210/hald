@@ -122,12 +122,7 @@ relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
 relabelSeLinuxPath rootPath contexts bp = do
   catch
     (void $ quietReadProcess "restorecon" ["-RF", bp] "")
-    ( \e ->
-        let _ = show (e :: IOException)
-         in hPutStrLn stderr "Relabeling boot directory failed."
-              >> raiseSignal sigTERM
-              >> threadDelay maxBound
-    )
+    (\(_ :: IOException) -> fatal "Relabeling boot directory failed.")
   catch
     ( do
         createSymlink "usr/lib" (rootPath <> "/lib")
@@ -137,12 +132,7 @@ relabelSeLinuxPath rootPath contexts bp = do
           (void $ quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] "")
           (\e -> let _ = show (e :: IOException) in return ())
     )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in hPutStrLn stderr "Relabeling root directory failed."
-              >> raiseSignal sigTERM
-              >> threadDelay maxBound
-    )
+    (\(_ :: IOException) -> fatal "Relabeling root directory failed.")
 
 getUserId :: IO Int
 getUserId =
@@ -178,10 +168,7 @@ signKernel bp dep target =
                      in return False
                 )
             else
-              hPutStrLn stderr ("Kernel for deployment " <> show dep <> " doesn't seem to exist.")
-                >> raiseSignal sigTERM
-                >> threadDelay maxBound
-                >> return False
+            fatalWith ("Kernel for deployment " <> show dep <> " doesn't seem to exist.") False
         )
 
 genericRootfulPreproc :: FilePath -> Bool -> Bool -> IO MessageContainer
@@ -262,6 +249,12 @@ printChannelMsg channel bar = do
   channelEmpty <- Stm.atomically $ Stm.isEmptyTChan channel
   when channelEmpty (Stm.atomically $ Stm.unGetTChan channel status)
   printChannelMsg channel (C.append (C.tail bar) (C.pack [C.head bar]))
+
+fatal :: String -> IO ()
+fatal msg = hPutStrLn stderr msg >> raiseSignal sigTERM >> threadDelay maxBound
+
+fatalWith :: String -> a -> IO a
+fatalWith msg x = hPutStrLn stderr msg >> raiseSignal sigTERM >> threadDelay maxBound >> return x
 
 listDirSafe :: FilePath -> IO [FilePath]
 listDirSafe dir = catch (listDirectory dir) (\(_ :: IOException) -> return [])

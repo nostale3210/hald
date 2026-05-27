@@ -1,31 +1,19 @@
 module Main.Container where
 
-import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, catch)
 import Control.Monad (void)
 import Main.Config qualified as Config
 import Main.Util qualified as Util
-import System.IO (hPutStrLn, stderr)
-import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (callProcess, readProcess)
 
 mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
   catch
     (void $ Util.quietReadProcess "podman" ["create", "--replace", "--name", podName, podUri] "")
-    ( \e ->
-        hPutStrLn stderr ("Creating container failed: " <> show (e :: IOException))
-          >> raiseSignal sigTERM
-          >> threadDelay maxBound
-    )
+    (\e -> Util.fatal $ "Creating container failed: " <> show (e :: IOException))
     >> catch
       (readProcess "podman" ["mount", "ald-root"] [])
-      ( \e ->
-          hPutStrLn stderr ("Mounting container failed: " <> show (e :: IOException))
-            >> raiseSignal sigTERM
-            >> threadDelay maxBound
-            >> return "failed"
-      )
+      (\e -> Util.fatalWith ("Mounting container failed: " <> show (e :: IOException)) "failed")
     >>= \podMount -> return $ Util.removeString "\n" podMount
 
 umountContainer :: String -> IO ()
@@ -62,11 +50,7 @@ buildImage conf =
           ]
         Util.printInfo "Container build completed." (Config.interactive conf)
     )
-    ( \e ->
-        hPutStrLn stderr ("Building image failed: " <> show (e :: IOException))
-          >> raiseSignal sigTERM
-          >> threadDelay maxBound
-    )
+    (\e -> Util.fatal $ "Building image failed: " <> show (e :: IOException))
 
 pullImage :: Config.Config -> IO Bool
 pullImage conf = do
@@ -85,10 +69,6 @@ pullImage conf = do
       Util.printInfo ("Pulling image " <> uri <> "...") (Config.interactive conf)
       catch
         (callProcess "podman" ["pull", uri])
-        ( \e ->
-            hPutStrLn stderr ("Pulling image failed: " <> show (e :: IOException))
-              >> raiseSignal sigTERM
-              >> threadDelay maxBound
-        )
+        (\e -> Util.fatal $ "Pulling image failed: " <> show (e :: IOException))
       Util.printInfo "Image pull completed." (Config.interactive conf)
       return True

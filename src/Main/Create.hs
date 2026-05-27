@@ -14,10 +14,8 @@ import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, fin
 import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Posix (fileMode, modificationTime, setFileMode, setFileTimesHiRes, setSymbolicLinkTimesHiRes)
-import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrently_)
-import UnliftIO.Concurrent (threadDelay)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
 createSkeleton depId conf uki backend =
@@ -39,28 +37,14 @@ createBootEntry depId conf = do
           ( readFile $
               Config.configPath conf <> "/boot.conf"
           )
-          ( \e ->
-              let err = show (e :: IOException)
-               in hPutStrLn stderr err
-                    >> raiseSignal sigTERM
-                    >> threadDelay maxBound
-                    >> return ""
-          )
+          (\e -> Util.fatalWith (show (e :: IOException)) "")
       catch
         ( writeFile
             (Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf")
             (generateBootEntry depId templateContent)
         )
-        ( \e ->
-            let err = show (e :: IOException)
-             in hPutStrLn stderr ("Couldn't create boot entry!\n" <> err)
-                  >> raiseSignal sigTERM
-                  >> threadDelay maxBound
-        )
-    else
-      hPutStrLn stderr ("No boot entry template found, make sure it exists at " <> Config.configPath conf <> "/boot.conf")
-        >> raiseSignal sigTERM
-        >> threadDelay maxBound
+        (\e -> Util.fatal $ "Couldn't create boot entry!\n" <> show (e :: IOException))
+    else Util.fatal $ "No boot entry template found, make sure it exists at " <> Config.configPath conf <> "/boot.conf"
 
 generateBootEntry :: Int -> String -> String
 generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
@@ -77,12 +61,7 @@ syncSystemConfig dropState conf dep = do
         void $ readProcess "podman" ["cp", "ald-root:/etc/shadow", depPath <> "/.tmp.shadow"] ""
         void $ readProcess "podman" ["cp", "ald-root:/etc/group", depPath <> "/.tmp.group"] ""
     )
-    ( \e ->
-        let err = show (e :: IOException)
-         in hPutStrLn stderr ("Couldn't sync system config!\n" <> err)
-              >> raiseSignal sigTERM
-              >> threadDelay maxBound
-    )
+    (\e -> Util.fatal $ "Couldn't sync system config!\n" <> show (e :: IOException))
   mergeFiles "/etc/passwd" (depPath <> "/.tmp.passwd") (depPath <> "/etc/passwd")
     >> removeTmpFile (depPath <> "/.tmp.passwd")
   mergeFiles "/etc/shadow" (depPath <> "/.tmp.shadow") (depPath <> "/etc/shadow")
@@ -107,23 +86,11 @@ mergeFiles inputA inputB outputFile = do
   contentA <-
     catch
       (readFile inputA)
-      ( \e ->
-          let _ = show (e :: IOException)
-           in hPutStrLn stderr "Failed to merge files!"
-                >> raiseSignal sigTERM
-                >> threadDelay maxBound
-                >> return ""
-      )
+      (\(_ :: IOException) -> Util.fatalWith "Failed to merge files!" "")
   contentB <-
     catch
       (readFile inputB)
-      ( \e ->
-          let _ = show (e :: IOException)
-           in hPutStrLn stderr "Failed to merge files!"
-                >> raiseSignal sigTERM
-                >> threadDelay maxBound
-                >> return ""
-      )
+      (\(_ :: IOException) -> Util.fatalWith "Failed to merge files!" "")
   let output =
         unlines
           . nubBy (\a b -> Util.takeUntil a ':' == Util.takeUntil b ':')
@@ -131,12 +98,7 @@ mergeFiles inputA inputB outputFile = do
           $ contentA <> contentB
   catch
     (writeFile outputFile output)
-    ( \e ->
-        let _ = show (e :: IOException)
-         in hPutStrLn stderr "Failed to merge files!"
-              >> raiseSignal sigTERM
-              >> threadDelay maxBound
-    )
+    (\(_ :: IOException) -> Util.fatal "Failed to merge files!")
 
 syncMinimumState :: FilePath -> IO ()
 syncMinimumState =
@@ -233,10 +195,10 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
       rsyncCmd = case linkSource of
         Just src -> rsyncArgs <> ["--link-dest=../../" <> show src <> "/usr"]
         Nothing -> rsyncArgs
-  catch (void $ readProcess "rsync" rsyncCmd "") (\e -> hPutStrLn stderr ("Syncing deployment /usr failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
+  catch (void $ readProcess "rsync" rsyncCmd "") (\e -> Util.fatal $ "Syncing deployment /usr failed: " <> show (e :: IOException))
   catch
     (writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep)))
-    (\e -> hPutStrLn stderr ("Writing deployment marker failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
+    (\e -> Util.fatal $ "Writing deployment marker failed: " <> show (e :: IOException))
 
 syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentUsrCas containerMount conf dep = do
@@ -253,7 +215,7 @@ syncDeploymentUsrCas containerMount conf dep = do
         (depPath <> "/usr/.ald_dep")
         (show (Dep.identifier dep))
     )
-    (\e -> hPutStrLn stderr ("Writing deployment marker failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
+    (\e -> Util.fatal $ "Writing deployment marker failed: " <> show (e :: IOException))
 
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
@@ -263,7 +225,7 @@ syncDeploymentEtc containerMount conf dep = do
   Util.ensureDirExists depEtc
   catch
     (copyTree containerEtc depEtc)
-    (\e -> hPutStrLn stderr ("Syncing deployment /etc failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
+    (\e -> Util.fatal $ "Syncing deployment /etc failed: " <> show (e :: IOException))
 
 copyTree :: FilePath -> FilePath -> IO ()
 copyTree src dst =
@@ -303,11 +265,10 @@ copyContainerFiles conf dep = do
       depId = Dep.identifier dep
   catch
     (void $ Util.quietReadProcess "podman" ["cp", "-a", "ald-root:/files", hp <> "/." <> show depId] "")
-    ( \e ->
-        let _ = show (e :: IOException)
-         in catch
-              (writeFile (hp <> "/." <> show depId) "")
-              (\e2 -> let _ = (e2 :: IOException) in raiseSignal sigTERM >> threadDelay maxBound)
+    ( \(_ :: IOException) ->
+        catch
+          (writeFile (hp <> "/." <> show depId) "")
+          (\(_ :: IOException) -> Util.fatal "")
     )
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
@@ -321,11 +282,7 @@ modulePathSearch conf deployment target = do
       )
       target
   case paths of
-    [] -> do
-      hPutStrLn stderr ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment))
-      raiseSignal sigTERM
-      threadDelay maxBound
-      return ""
+    [] -> Util.fatalWith ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment)) ""
     x : _ -> return x
 
 placeBootFiles :: Config.Config -> Dep.Deployment -> IO ()
@@ -339,10 +296,7 @@ placeBootFiles conf deployment = do
     Just x -> do
       copyFile kernel (x <> "/vmlinuz")
       copyFile initrd (x <> "/initramfs.img")
-    Nothing -> do
-      hPutStrLn stderr ("No boot directory supplied for deployment " <> show (Dep.identifier deployment))
-      raiseSignal sigTERM
-      threadDelay maxBound
+    Nothing -> Util.fatal $ "No boot directory supplied for deployment " <> show (Dep.identifier deployment)
 
 installUki :: Config.Config -> Dep.Deployment -> IO ()
 installUki conf deployment = do
@@ -355,13 +309,7 @@ installUki conf deployment = do
       ( readFile $
           Config.configPath conf <> "/cmdline"
       )
-      ( \e ->
-          let err = show (e :: IOException)
-           in hPutStrLn stderr err
-                >> raiseSignal sigTERM
-                >> threadDelay maxBound
-                >> return ""
-      )
+      (\e -> Util.fatalWith (show (e :: IOException)) "")
   let cmdline =
         Util.removeString "\n" $
           Util.replaceString
@@ -384,12 +332,8 @@ installUki conf deployment = do
               ]
               ""
         )
-        ( \e -> hPutStrLn stderr ("ukify build failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound
-        )
-    Nothing -> do
-      hPutStrLn stderr ("No UKI path supplied for deployment " <> show (Dep.identifier deployment))
-      raiseSignal sigTERM
-      threadDelay maxBound
+        (\e -> Util.fatal $ "ukify build failed: " <> show (e :: IOException))
+    Nothing -> Util.fatal $ "No UKI path supplied for deployment " <> show (Dep.identifier deployment)
 
 getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 getPackageDB containerPath conf dep =
@@ -410,12 +354,7 @@ getPackageDB containerPath conf dep =
           ""
         >> return ()
     )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in hPutStrLn stderr "Failed fetching package db!"
-              >> raiseSignal sigTERM
-              >> threadDelay maxBound
-    )
+    (\(_ :: IOException) -> Util.fatal "Failed fetching package db!")
 
 setDefaultBootEntry :: Int -> IO ()
 setDefaultBootEntry dep = do
