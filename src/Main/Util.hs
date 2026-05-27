@@ -15,7 +15,7 @@ import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 import System.IO.Error (isAlreadyExistsError)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus)
-import System.Process (CreateProcess (..), StdStream (NoStream), proc, readCreateProcessWithExitCode, readProcess)
+import System.Process (readProcess, readProcessWithExitCode)
 
 data MessageContainer
   = MessageContainer {interactive :: Bool, channel :: Stm.TChan String}
@@ -97,10 +97,7 @@ isMountpoint path =
 
 quietReadProcess :: FilePath -> [String] -> String -> IO String
 quietReadProcess cmd args input = do
-  (ec, out, _) <-
-    readCreateProcessWithExitCode
-      (proc cmd args) {std_err = NoStream}
-      input
+  (ec, out, _) <- readProcessWithExitCode cmd args input
   case ec of
     ExitSuccess -> return out
     ExitFailure n -> ioError (userError (cmd <> " failed with exit code " <> show n))

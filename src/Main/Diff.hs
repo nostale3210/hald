@@ -10,8 +10,9 @@ import Data.Ord (Down (..), comparing)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
 import Main.Util qualified as Util
+import System.Exit (ExitCode (..))
 import System.IO (hClose, openTempFile)
-import System.Process (proc, readCreateProcessWithExitCode)
+import System.Process (readProcessWithExitCode)
 import UnliftIO.Async (concurrently)
 
 selectDeployment :: [Int] -> [Int] -> Int
@@ -111,9 +112,7 @@ diffStati from to = do
         let _ = show (e :: IOException)
          in putStrLn "Failed to create temporary files. Is /tmp writable?"
     )
-    >> catch
-      ( do
-          (_, diffOutput, _) <- readCreateProcessWithExitCode (proc "diff" ["-y", tmpFrom, tmpTo]) ""
-          putStr . unlines . filter (any (`elem` "|><")) . lines $ diffOutput
-      )
-      (\e -> let _ = show (e :: IOException) in putStrLn "No difference found.")
+  (ec, diffOutput, _) <- readProcessWithExitCode "diff" ["-y", tmpFrom, tmpTo] ""
+  case ec of
+    ExitSuccess -> putStrLn "No difference found."
+    _ -> putStr . unlines . filter (any (`elem` "|><")) . lines $ diffOutput
