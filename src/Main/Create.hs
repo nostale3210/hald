@@ -12,8 +12,7 @@ import Main.Util qualified as Util
 import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, listDirectory, removeFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
-import System.IO.Error (isAlreadyExistsError)
-import System.Posix (createSymbolicLink, fileMode, isDirectory, isSymbolicLink, modificationTime, setFileMode, setFileTimes)
+import System.Posix (fileMode, isDirectory, isSymbolicLink, modificationTime, setFileMode, setFileTimes)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrentlyN_, pooledForConcurrently_)
@@ -214,11 +213,7 @@ syncSingle path target = do
       | isSymbolicLink x -> do
           symTarget <- getSymbolicLinkTarget path
           Util.ensureDirExists (takeDirectory fullTarget)
-          catch
-            (createSymbolicLink symTarget fullTarget)
-            ( \e ->
-                if isAlreadyExistsError e then return () else ioError e
-            )
+          Util.createSymlink symTarget fullTarget
       | otherwise -> do
           Util.ensureDirExists (takeDirectory fullTarget)
           copyFileWithMetadata path fullTarget
@@ -288,9 +283,7 @@ copyTree src dst = do
         | isSymbolicLink s -> do
             symTarget <- getSymbolicLinkTarget srcPath
             Util.ensureDirExists (takeDirectory dstPath)
-            catch
-              (createSymbolicLink symTarget dstPath)
-              (\e -> if isAlreadyExistsError e then return () else ioError e)
+            Util.createSymlink symTarget dstPath
         | otherwise -> do
             Util.ensureDirExists (takeDirectory dstPath)
             copyFileWithMetadata srcPath dstPath

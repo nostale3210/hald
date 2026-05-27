@@ -6,13 +6,13 @@ import Control.Concurrent.STM qualified as Stm
 import Control.Exception (IOException, catch)
 import Control.Monad (forM, unless, void, when)
 import Data.ByteString.Char8 qualified as C
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory, removeFile)
 import System.Environment (getArgs, getExecutablePath)
 import System.Exit (ExitCode (..))
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
-import System.IO.Error (isAlreadyExistsError)
+import System.IO.Error (isDoesNotExistError)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
 import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus)
 import System.Process (readProcess, readProcessWithExitCode)
@@ -72,19 +72,9 @@ ensureDirExists dir =
         )
 
 createSymlink :: FilePath -> FilePath -> IO ()
-createSymlink target link =
-  catch
-    (createSymbolicLink target link)
-    ( \e ->
-        if isAlreadyExistsError e
-          then return ()
-          else
-            let err = show (e :: IOException)
-             in printInfo
-                  ( "Couldn't create symlink from " <> target <> " to " <> link <> "; " <> err
-                  )
-                  False
-    )
+createSymlink target link = do
+  catch (removeFile link) (\e -> if isDoesNotExistError e then return () else ioError e)
+  catch (createSymbolicLink target link) ioError
 
 isMountpoint :: FilePath -> IO Bool
 isMountpoint path =
