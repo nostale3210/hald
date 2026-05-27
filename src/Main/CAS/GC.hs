@@ -2,15 +2,15 @@ module Main.CAS.GC (collectGarbage, restoreStoreFlags) where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (unless, when)
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Lock qualified as Lock
+import Main.Util (TreeAction (..), WalkStrategy (..))
 import Main.Util qualified as Util
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, removeDirectory, removeFile)
 import System.FilePath ((</>))
-import System.Posix.Files (deviceID, fileID, isDirectory, isRegularFile)
-import System.Posix.Types (DeviceID, FileID)
+import System.Posix.Files (deviceID, fileID, isRegularFile)
 import UnliftIO.Async (pooledForConcurrentlyN_, pooledForConcurrently_)
 import UnliftIO.Concurrent (getNumCapabilities)
 
@@ -39,10 +39,18 @@ collectGarbage conf keptDepIds = do
       casDir = hp </> "objects"
       workThreads = max 1 $ div threads 2
   refSetVar <- newIORef Set.empty
-  pooledForConcurrently_ keptDepIds $ \depId -> do
-    let dir = hp </> show depId </> "usr"
-    dirExists <- doesDirectoryExist dir
-    when dirExists $ walkTree dir refSetVar
+  pooledForConcurrently_ keptDepIds $ \depId ->
+    Util.walk
+      (ParallelN 2)
+      ( TreeAction
+          { dirAction = \_ _ -> return (),
+            symAction = \_ _ -> return (),
+            fileAction = \_ s ->
+              when (isRegularFile s) $
+                atomicModifyIORef' refSetVar (\acc -> (Set.insert (deviceID s, fileID s) acc, ()))
+          }
+      )
+      (hp </> show depId </> "usr")
   refSet <- readIORef refSetVar
 
   dirExists <- doesDirectoryExist casDir
@@ -66,35 +74,15 @@ collectGarbage conf keptDepIds = do
   removeEmptyDirectories casDir
   restoreStoreFlags conf
 
-walkTree :: FilePath -> IORef (Set.Set (DeviceID, FileID)) -> IO ()
-walkTree dir ref = do
-  contents <- listDirectory dir
-  pooledForConcurrentlyN_ 2 contents $ \name -> do
-    let path = dir </> name
-    mStat <- Util.tryStat path
-    case mStat of
-      Just stat
-        | isRegularFile stat ->
-            atomicModifyIORef' ref (\s -> (Set.insert (deviceID stat, fileID stat) s, ()))
-        | isDirectory stat -> walkTree path ref
-        | otherwise -> return ()
-      Nothing -> return ()
-
 removeEmptyDirectories :: FilePath -> IO ()
-removeEmptyDirectories dir = do
-  mStat <- Util.tryStat dir
-  case mStat of
-    Just s | isDirectory s -> do
-      contents <- listDirectory dir
-      pooledForConcurrently_ contents $ \name -> do
-        let subPath = dir </> name
-        mSubStat <- Util.tryStat subPath
-        case mSubStat of
-          Just ss | isDirectory ss -> removeEmptyDirectories subPath
-          _ -> return ()
-      contents' <- listDirectory dir
-      when (null contents') $
-        catch
-          (removeDirectory dir)
-          (\e -> let _ = show (e :: IOException) in return ())
-    _ -> return ()
+removeEmptyDirectories = Util.walk (ParallelN 2) action
+  where
+    action =
+      TreeAction
+        { dirAction = \d _ -> do
+            contents <- listDirectory d
+            when (null contents) $
+              catch (removeDirectory d) (\e -> let _ = show (e :: IOException) in return ()),
+          symAction = \_ _ -> return (),
+          fileAction = \_ _ -> return ()
+        }

@@ -5,7 +5,7 @@ import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Util qualified as Util
-import System.Directory (doesDirectoryExist, listDirectory)
+import System.Directory (doesDirectoryExist)
 import System.FilePath ((</>))
 
 data Backend = Hardlink | Cas deriving (Show, Eq)

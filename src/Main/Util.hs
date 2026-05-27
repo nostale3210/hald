@@ -4,7 +4,7 @@ import Control.Concurrent (forkIO, getNumCapabilities, threadDelay)
 import Control.Concurrent qualified as Conc
 import Control.Concurrent.STM qualified as Stm
 import Control.Exception (IOException, catch)
-import Control.Monad (forM, unless, void, when)
+import Control.Monad (forM, forM_, unless, void, when)
 import Data.ByteString.Char8 qualified as C
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory, removeFile)
 import System.Environment (getArgs, getExecutablePath)
@@ -14,11 +14,20 @@ import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 import System.IO.Error (isDoesNotExistError)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
-import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus)
+import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus, isDirectory, isSymbolicLink)
 import System.Process (readProcess, readProcessWithExitCode)
+import UnliftIO.Async (pooledForConcurrentlyN_)
 
 data MessageContainer
   = MessageContainer {interactive :: Bool, channel :: Stm.TChan String}
+
+data WalkStrategy = Sequential | ParallelN Int
+
+data TreeAction = TreeAction
+  { dirAction :: FilePath -> FileStatus -> IO (),
+    symAction :: FilePath -> FileStatus -> IO (),
+    fileAction :: FilePath -> FileStatus -> IO ()
+  }
 
 removeString :: String -> String -> String
 removeString mtch = replaceString mtch ""
@@ -262,3 +271,21 @@ tryStat path =
   catch
     (Just <$> getSymbolicLinkStatus path)
     (\e -> let _ = show (e :: IOException) in return Nothing)
+
+walk :: WalkStrategy -> TreeAction -> FilePath -> IO ()
+walk strategy action = dispatch
+  where
+    dispatch path = do
+      mStat <- tryStat path
+      case mStat of
+        Nothing -> return ()
+        Just s
+          | isDirectory s -> dirAction action path s >> walkDir path
+          | isSymbolicLink s -> symAction action path s
+          | otherwise -> fileAction action path s
+    walkDir dir = do
+      entries <- listDirSafe dir
+      let processEntry entry = dispatch (dir </> entry)
+      case strategy of
+        Sequential -> forM_ entries processEntry
+        ParallelN n -> pooledForConcurrentlyN_ n entries processEntry

@@ -1,21 +1,22 @@
 module Main.Create where
 
 import Control.Exception (IOException, catch)
-import Control.Monad (forM_, void, when)
+import Control.Monad (void, when)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
 import Main.CAS.Ingest qualified as CAS
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep
+import Main.Util (TreeAction (..), WalkStrategy (..))
 import Main.Util qualified as Util
-import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, listDirectory, removeFile)
-import System.FilePath (takeDirectory, (</>))
+import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, removeFile)
+import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
-import System.Posix (fileMode, isDirectory, isSymbolicLink, modificationTime, setFileMode, setFileTimes)
+import System.Posix (fileMode, modificationTime, setFileMode, setFileTimesHiRes, setSymbolicLinkTimesHiRes)
 import System.Posix.Signals (raiseSignal, sigTERM)
 import System.Process (readProcess)
-import UnliftIO.Async (concurrently, pooledForConcurrentlyN_, pooledForConcurrently_)
+import UnliftIO.Async (concurrently, pooledForConcurrently_)
 import UnliftIO.Concurrent (threadDelay)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
@@ -163,21 +164,20 @@ syncState depPath = do
 collectFiles :: FilePath -> IO [FilePath]
 collectFiles root = do
   ref <- newIORef []
-  walk root ref
+  Util.walk
+    (ParallelN 2)
+    ( TreeAction
+        { dirAction = \_ _ -> return (),
+          symAction = \p s ->
+            when (modificationTime s /= 0) $
+              atomicModifyIORef' ref (\acc -> (p : acc, ())),
+          fileAction = \p s ->
+            when (modificationTime s /= 0) $
+              atomicModifyIORef' ref (\acc -> (p : acc, ()))
+        }
+    )
+    root
   readIORef ref
-  where
-    walk dir ref = do
-      entries <- Util.listDirSafe dir
-      pooledForConcurrentlyN_ 2 entries $ \entry -> do
-        let path = dir </> entry
-        mStat <- Util.tryStat path
-        case mStat of
-          Nothing -> return ()
-          Just s
-            | isDirectory s -> walk path ref
-            | modificationTime s == 0 -> return ()
-            | otherwise ->
-                atomicModifyIORef' ref (\acc -> (path : acc, ()))
 
 syncSingleFile :: [FilePath] -> FilePath -> IO ()
 syncSingleFile files destination
@@ -199,25 +199,24 @@ syncSingleFile files destination
           )
 
 syncSingle :: FilePath -> FilePath -> IO ()
-syncSingle path target = do
-  stat <- Util.tryStat path
-  let fullTarget = target <> path
-  case stat of
-    Just x
-      | isDirectory x -> do
-          Util.ensureDirExists fullTarget
-          setFileMode fullTarget (fileMode x)
-          dirEntries <- listDirectory path
-          forM_ dirEntries $ \entry ->
-            syncSingle (path </> entry) target
-      | isSymbolicLink x -> do
-          symTarget <- getSymbolicLinkTarget path
-          Util.ensureDirExists (takeDirectory fullTarget)
-          Util.createSymlink symTarget fullTarget
-      | otherwise -> do
-          Util.ensureDirExists (takeDirectory fullTarget)
-          copyFileWithMetadata path fullTarget
-    Nothing -> void $ ioError (userError "Couldn't stat path!")
+syncSingle path target = Util.walk Sequential action path
+  where
+    action =
+      TreeAction
+        { dirAction = \p s -> do
+            let d = target <> p
+            Util.ensureDirExists d
+            setFileMode d (fileMode s),
+          symAction = \p _ -> do
+            let d = target <> p
+            symTarget <- getSymbolicLinkTarget p
+            Util.ensureDirExists (takeDirectory d)
+            Util.createSymlink symTarget d,
+          fileAction = \p _ -> do
+            let d = target <> p
+            Util.ensureDirExists (takeDirectory d)
+            copyFileWithMetadata p d
+        }
 
 syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
 syncDeploymentUsr containerMount conf dep linkSource =
@@ -267,45 +266,36 @@ syncDeploymentEtc containerMount conf dep = do
     (\e -> hPutStrLn stderr ("Syncing deployment /etc failed: " <> show (e :: IOException)) >> raiseSignal sigTERM >> threadDelay maxBound)
 
 copyTree :: FilePath -> FilePath -> IO ()
-copyTree src dst = do
-  entries <- listDirectory src
-  pooledForConcurrentlyN_ 2 entries $ \entry -> do
-    let srcPath = src </> entry
-        dstPath = dst </> entry
-    mStat <- Util.tryStat srcPath
-    case mStat of
-      Nothing -> return ()
-      Just s
-        | isDirectory s -> do
-            Util.ensureDirExists dstPath
-            setFileMode dstPath (fileMode s)
-            copyTree srcPath dstPath
-        | isSymbolicLink s -> do
-            symTarget <- getSymbolicLinkTarget srcPath
-            Util.ensureDirExists (takeDirectory dstPath)
-            Util.createSymlink symTarget dstPath
-        | otherwise -> do
-            Util.ensureDirExists (takeDirectory dstPath)
-            copyFileWithMetadata srcPath dstPath
+copyTree src dst =
+  Util.walk (ParallelN 2) action src
+  where
+    action =
+      TreeAction
+        { dirAction = \p s -> do
+            let d = dst </> makeRelative src p
+            Util.ensureDirExists d
+            setFileMode d (fileMode s),
+          symAction = \p _ -> do
+            let d = dst </> makeRelative src p
+            symTarget <- getSymbolicLinkTarget p
+            Util.ensureDirExists (takeDirectory d)
+            Util.createSymlink symTarget d,
+          fileAction = \p _ -> do
+            let d = dst </> makeRelative src p
+            Util.ensureDirExists (takeDirectory d)
+            copyFileWithMetadata p d
+        }
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
-normalizeDepEtcTimestamps conf dep = do
-  let depEtc = Config.haldPath conf </> show (Dep.identifier dep) <> "/etc"
-  etcExists <- doesDirectoryExist depEtc
-  when etcExists $
-    walk depEtc
+normalizeDepEtcTimestamps conf dep =
+  Util.walk Sequential action (Config.haldPath conf </> show (Dep.identifier dep) <> "/etc")
   where
-    walk dir = do
-      entries <- Util.listDirSafe dir
-      forM_ entries $ \entry -> do
-        let path = dir </> entry
-        stat <- Util.tryStat path
-        case stat of
-          Nothing -> return ()
-          Just s
-            | isDirectory s -> setFileTimes path 0 0 >> walk path
-            | isSymbolicLink s -> return ()
-            | otherwise -> setFileTimes path 0 0
+    action =
+      TreeAction
+        { dirAction = \p _ -> setFileTimesHiRes p 0 0,
+          symAction = \p _ -> setSymbolicLinkTimesHiRes p 0 0,
+          fileAction = \p _ -> setFileTimesHiRes p 0 0
+        }
 
 copyContainerFiles :: Config.Config -> Dep.Deployment -> IO ()
 copyContainerFiles conf dep = do

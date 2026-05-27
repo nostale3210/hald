@@ -1,17 +1,15 @@
 module Main.Lock where
 
 import Control.Exception (IOException, catch)
-import Control.Monad (forM_, unless, void, when)
+import Control.Monad (unless, void, when)
 import Data.Bits (shiftL, (.|.))
 import Foreign.C.String (CString, withCString)
 import Foreign.C.Types (CInt (..), CLong (..), CULong (..))
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (poke, sizeOf)
+import Main.Util (TreeAction (..), WalkStrategy (..))
 import Main.Util qualified as Util
-import System.Directory (listDirectory)
-import System.Posix.Files (isDirectory, isSymbolicLink)
-import System.FilePath ((</>))
 import System.Process (readProcess)
 
 fsIocSetflags :: CULong
@@ -78,20 +76,15 @@ setMutable fp =
 clearRecursiveImmutable :: FilePath -> IO ()
 clearRecursiveImmutable fp =
   catch
-    ( do
-        mStat <- Util.tryStat fp
-        case mStat of
-          Just s
-            | isSymbolicLink s -> return ()
-            | isDirectory s -> do
-                setFileFlag fp 0
-                contents <- listDirectory fp
-                forM_ contents $ \name ->
-                  clearRecursiveImmutable (fp </> name)
-            | otherwise -> setFileFlag fp 0
-          Nothing -> return ()
-    )
+    (Util.walk Sequential action fp)
     (\e -> let _ = show (e :: IOException) in return ())
+  where
+    action =
+      TreeAction
+        { dirAction = \p _ -> setFileFlag p 0,
+          symAction = \_ _ -> return (),
+          fileAction = \p _ -> setFileFlag p 0
+        }
 
 roBindMountDirToSelf :: ReadMode -> FilePath -> IO ()
 roBindMountDirToSelf readMode dirPath =
