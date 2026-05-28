@@ -1,13 +1,13 @@
-module Main.Diff where
+module Hald.Diff where
 
 import Control.Exception (IOException, catch)
 import Data.Char (isSpace)
 import Data.List (sort, sortBy)
 import Data.Maybe (fromMaybe)
 import Data.Ord (Down (..), comparing)
-import Main.Config qualified as Config
-import Main.Deployment qualified as Dep
-import Main.Util qualified as Util
+import Hald.Config qualified as Config
+import Hald.Deployment qualified as Dep
+import Hald.Util qualified as Util
 import System.Exit (ExitCode (..))
 import System.IO (hClose, openTempFile)
 import System.Process (readProcessWithExitCode)

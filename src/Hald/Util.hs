@@ -1,4 +1,4 @@
-module Main.Util where
+module Hald.Util where
 
 import Control.Concurrent (forkIO, getNumCapabilities, threadDelay)
 import Control.Concurrent qualified as Conc

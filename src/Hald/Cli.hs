@@ -1,4 +1,4 @@
-module Main.Cli where
+module Hald.Cli where
 
 import Options.Applicative
 

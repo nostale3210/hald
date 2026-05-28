@@ -1,4 +1,4 @@
-module Main.Fail
+module Hald.Fail
   ( installAsyncHandler,
     cleanupOnError,
     failAndCleanup,
@@ -9,13 +9,13 @@ import Control.Concurrent (myThreadId, throwTo)
 import Control.Exception (AsyncException (UserInterrupt))
 import Control.Monad (unless)
 import Data.Maybe qualified
-import Main.CAS.GC qualified as CasGc
-import Main.Config qualified as Config
-import Main.Container qualified as Container
-import Main.Deployment qualified as Dep
-import Main.Lock qualified as Lock
-import Main.Space qualified as Space
-import Main.Util qualified as Util
+import Hald.CAS.GC qualified as CasGc
+import Hald.Config qualified as Config
+import Hald.Container qualified as Container
+import Hald.Deployment qualified as Dep
+import Hald.Lock qualified as Lock
+import Hald.Space qualified as Space
+import Hald.Util qualified as Util
 import System.FilePath ((</>))
 import System.Posix.Signals (Handler (CatchInfoOnce), Signal, installHandler)
 

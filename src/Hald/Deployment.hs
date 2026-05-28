@@ -1,10 +1,10 @@
-module Main.Deployment where
+module Hald.Deployment where
 
 import Control.Exception (IOException, catch)
 import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Set qualified as Set
-import Main.Config qualified as Config
-import Main.Util qualified as Util
+import Hald.Config qualified as Config
+import Hald.Util qualified as Util
 import System.Directory (doesDirectoryExist)
 import System.FilePath ((</>))
 

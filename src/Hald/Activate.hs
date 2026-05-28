@@ -1,9 +1,9 @@
-module Main.Activate where
+module Hald.Activate where
 
 import Control.Monad (void, when)
-import Main.Deployment qualified as Dep
-import Main.Lock qualified as Lock
-import Main.Util qualified as Util
+import Hald.Deployment qualified as Dep
+import Hald.Lock qualified as Lock
+import Hald.Util qualified as Util
 import System.Posix.Signals (addSignal, blockSignals, emptySignalSet, sigINT, sigTERM, unblockSignals)
 import System.Process (readProcess)
 

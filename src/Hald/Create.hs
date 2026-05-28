@@ -1,15 +1,15 @@
-module Main.Create where
+module Hald.Create where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Exception (IOException, catch)
 import Control.Monad (void, when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
-import Main.CAS.Ingest qualified as CAS
-import Main.Config qualified as Config
-import Main.Deployment qualified as Dep
-import Main.Util (TreeAction (..), WalkStrategy (..))
-import Main.Util qualified as Util
+import Hald.CAS.Ingest qualified as CAS
+import Hald.Config qualified as Config
+import Hald.Deployment qualified as Dep
+import Hald.Util (TreeAction (..), WalkStrategy (..))
+import Hald.Util qualified as Util
 import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, removeFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)

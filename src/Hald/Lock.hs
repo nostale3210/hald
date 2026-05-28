@@ -1,4 +1,4 @@
-module Main.Lock where
+module Hald.Lock where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (unless, void, when)
@@ -8,8 +8,8 @@ import Foreign.C.Types (CInt (..), CLong (..), CULong (..))
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (poke, sizeOf)
-import Main.Util (TreeAction (..), WalkStrategy (..))
-import Main.Util qualified as Util
+import Hald.Util (TreeAction (..), WalkStrategy (..))
+import Hald.Util qualified as Util
 import System.Process (readProcess)
 
 fsIocSetflags :: CULong

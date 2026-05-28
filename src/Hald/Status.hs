@@ -1,10 +1,10 @@
-module Main.Status where
+module Hald.Status where
 
 import Control.Exception (IOException, catch)
 import Data.List (isPrefixOf, sort)
-import Main.Config qualified as Config
-import Main.Deployment qualified as Dep
-import Main.Util qualified as Util
+import Hald.Config qualified as Config
+import Hald.Deployment qualified as Dep
+import Hald.Util qualified as Util
 import System.Directory (listDirectory)
 import System.FilePath (takeBaseName, takeDirectory, (</>))
 import UnliftIO.Async (forConcurrently)

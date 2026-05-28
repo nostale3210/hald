@@ -1,14 +1,14 @@
 module Main where
 
-import Main.Assemble.Activate as Asac
-import Main.Assemble.Create qualified as Ascr
-import Main.Assemble.Gc qualified as Asgc
-import Main.Assemble.Remove qualified as Asrm
-import Main.Cli qualified as Cli
-import Main.Config qualified as Config
-import Main.Diff qualified as Diff
-import Main.Status qualified as Status
-import Main.Util qualified as Util
+import Hald.Assemble.Activate as Asac
+import Hald.Assemble.Create qualified as Ascr
+import Hald.Assemble.Gc qualified as Asgc
+import Hald.Assemble.Remove qualified as Asrm
+import Hald.Cli qualified as Cli
+import Hald.Config qualified as Config
+import Hald.Diff qualified as Diff
+import Hald.Status qualified as Status
+import Hald.Util qualified as Util
 import Options.Applicative (execParser)
 
 main :: IO ()

@@ -1,12 +1,12 @@
-module Main.Space where
+module Hald.Space where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (sort)
-import Main.Config qualified as Config
-import Main.Deployment qualified as Dep
-import Main.Lock qualified as Lock
-import Main.Util qualified as Util
+import Hald.Config qualified as Config
+import Hald.Deployment qualified as Dep
+import Hald.Lock qualified as Lock
+import Hald.Util qualified as Util
 import System.Directory (removePathForcibly)
 import System.FilePath ((</>))
 import UnliftIO.Async (pooledForConcurrently_)

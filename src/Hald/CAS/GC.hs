@@ -1,12 +1,12 @@
-module Main.CAS.GC (collectGarbage, restoreStoreFlags) where
+module Hald.CAS.GC (collectGarbage, restoreStoreFlags) where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Monad (unless, when)
 import Data.Set qualified as Set
-import Main.Config qualified as Config
-import Main.Lock qualified as Lock
-import Main.Util (TreeAction (..), WalkStrategy (..))
-import Main.Util qualified as Util
+import Hald.Config qualified as Config
+import Hald.Lock qualified as Lock
+import Hald.Util (TreeAction (..), WalkStrategy (..))
+import Hald.Util qualified as Util
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, removeDirectory, removeFile)
 import System.FilePath ((</>))
 import System.Posix.Files (deviceID, fileID, isRegularFile)

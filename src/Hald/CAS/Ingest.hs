@@ -1,4 +1,4 @@
-module Main.CAS.Ingest
+module Hald.CAS.Ingest
   ( TreeEntry (..),
     AssetMap,
     ingestTree,
@@ -13,9 +13,9 @@ import Data.ByteString.Char8 qualified as B8
 import Data.HashMap.Strict qualified as HashMap
 import Data.List (partition)
 import Data.Maybe (mapMaybe)
-import Main.CAS.Hash qualified as Hash
-import Main.Lock qualified as Lock
-import Main.Util qualified as Util
+import Hald.CAS.Hash qualified as Hash
+import Hald.Lock qualified as Lock
+import Hald.Util qualified as Util
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (Handle, IOMode (WriteMode), hPutStrLn, withFile)

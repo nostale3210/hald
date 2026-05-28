@@ -1,9 +1,9 @@
-module Main.Container where
+module Hald.Container where
 
 import Control.Exception (IOException, catch)
 import Control.Monad (void)
-import Main.Config qualified as Config
-import Main.Util qualified as Util
+import Hald.Config qualified as Config
+import Hald.Util qualified as Util
 import System.Process (callProcess, readProcess)
 
 mountContainer :: String -> String -> IO FilePath

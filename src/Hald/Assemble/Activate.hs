@@ -1,13 +1,13 @@
-module Main.Assemble.Activate where
+module Hald.Assemble.Activate where
 
 import Control.Exception (onException)
 import Control.Monad (unless)
-import Main.Activate qualified as Activate
-import Main.Config qualified as Config
-import Main.Deployment qualified as Dep
-import Main.Fail qualified as Fail
-import Main.Lock qualified as Lock
-import Main.Util qualified as Util
+import Hald.Activate qualified as Activate
+import Hald.Config qualified as Config
+import Hald.Deployment qualified as Dep
+import Hald.Fail qualified as Fail
+import Hald.Lock qualified as Lock
+import Hald.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
 deploymentActivationAssemblyPre :: Int -> Config.Config -> Bool -> IO ()

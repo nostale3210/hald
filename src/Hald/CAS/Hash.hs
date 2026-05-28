@@ -1,4 +1,4 @@
-module Main.CAS.Hash (hashFile) where
+module Hald.CAS.Hash (hashFile) where
 
 import BLAKE3 qualified as B3
 import Data.ByteString qualified as BS

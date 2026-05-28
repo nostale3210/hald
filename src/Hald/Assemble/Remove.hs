@@ -1,13 +1,13 @@
-module Main.Assemble.Remove where
+module Hald.Assemble.Remove where
 
 import Control.Exception (onException)
-import Main.CAS.GC qualified as CasGc
-import Main.Config qualified as Config
-import Main.Deployment qualified as Dep
-import Main.Fail qualified as Fail
-import Main.Lock qualified as Lock
-import Main.Space qualified as Space
-import Main.Util qualified as Util
+import Hald.CAS.GC qualified as CasGc
+import Hald.Config qualified as Config
+import Hald.Deployment qualified as Dep
+import Hald.Fail qualified as Fail
+import Hald.Lock qualified as Lock
+import Hald.Space qualified as Space
+import Hald.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
 deploymentErasureAssemblyPre :: Int -> Config.Config -> Bool -> IO ()

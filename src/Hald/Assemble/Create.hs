@@ -1,19 +1,19 @@
-module Main.Assemble.Create where
+module Hald.Assemble.Create where
 
 import Control.Exception (onException)
 import Control.Monad (unless, when)
 import Data.Maybe (isNothing)
-import Main.Assemble.Activate qualified as Asac
-import Main.Assemble.Gc qualified as Asgc
-import Main.CAS.GC qualified as CasGc
-import Main.Config qualified as Config
-import Main.Container qualified as Container
-import Main.Create qualified as Create
-import Main.Deployment qualified as Dep
-import Main.Fail qualified as Fail
-import Main.Lock qualified as Lock
-import Main.Space qualified as Space
-import Main.Util qualified as Util
+import Hald.Assemble.Activate qualified as Asac
+import Hald.Assemble.Gc qualified as Asgc
+import Hald.CAS.GC qualified as CasGc
+import Hald.Config qualified as Config
+import Hald.Container qualified as Container
+import Hald.Create qualified as Create
+import Hald.Deployment qualified as Dep
+import Hald.Fail qualified as Fail
+import Hald.Lock qualified as Lock
+import Hald.Space qualified as Space
+import Hald.Util qualified as Util
 import System.FilePath ((</>))
 import System.Mem (performGC)
 import System.Posix.Signals (sigINT, sigTERM)

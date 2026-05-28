@@ -1,7 +1,7 @@
-module Main.Config where
+module Hald.Config where
 
 import Control.Exception (IOException, catch)
-import Main.Util qualified as Util
+import Hald.Util qualified as Util
 
 data PackageManager
   = Apk
