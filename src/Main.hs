@@ -1,6 +1,7 @@
 module Main where
 
 import Hald.Assemble.Activate as Asac
+import Hald.Assemble.Cas qualified as Ascas
 import Hald.Assemble.Create qualified as Ascr
 import Hald.Assemble.Gc qualified as Asgc
 import Hald.Assemble.Remove qualified as Asrm
@@ -29,6 +30,7 @@ assembleAction parser = do
     Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf inhibit
     Cli.Gc -> Asgc.deploymentGcAssemblyPre conf inhibit
     Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf inhibit
+    Cli.Cas Cli.CasGc -> Ascas.gcAssemblyPre conf inhibit
     Cli.Status -> Status.printDepStati conf
     Cli.Diff x y -> Diff.printDiff x y conf
   where

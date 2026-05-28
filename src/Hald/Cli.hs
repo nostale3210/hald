@@ -1,12 +1,37 @@
 module Hald.Cli where
 
 import Options.Applicative
+  ( CommandFields,
+    Mod,
+    Parser,
+    ParserInfo,
+    argument,
+    auto,
+    command,
+    flag,
+    footer,
+    fullDesc,
+    header,
+    help,
+    helper,
+    hsubparser,
+    info,
+    long,
+    metavar,
+    option,
+    progDesc,
+    short,
+    strOption,
+    value,
+  )
 
 data GlobalOpts = GlobalOpts
   { optRootdir :: !String,
     optSystemd :: !Bool,
     optCommand :: !Command
   }
+
+data CasCommand = CasGc
 
 data Command
   = Dep
@@ -25,6 +50,7 @@ data Command
   | Diff Int Int
   | Rm Int
   | Gc
+  | Cas CasCommand
 
 optsParser :: ParserInfo GlobalOpts
 optsParser =
@@ -52,7 +78,7 @@ commandOptions =
       ( long "skip-systemd-inhibit"
           <> help "Don't invoke systemd-inhibit even if available"
       )
-    <*> hsubparser (depCommand <> activateCommand <> statusCommand <> diffCommand <> rmCommand <> gcCommand)
+    <*> hsubparser (depCommand <> activateCommand <> statusCommand <> diffCommand <> rmCommand <> gcCommand <> casCommand)
 
 depCommand :: Mod CommandFields Command
 depCommand =
@@ -158,3 +184,11 @@ diffOptions =
   Diff
     <$> option auto (long "from" <> short 'f' <> help "First deployment (optional)" <> value 0 <> metavar "ID")
     <*> option auto (long "to" <> short 't' <> help "Second deployment (optional)" <> value 0 <> metavar "ID")
+
+casCommand :: Mod CommandFields Command
+casCommand =
+  command "cas" (info (Cas <$> hsubparser casGcCommand) (progDesc "CAS operations"))
+
+casGcCommand :: Mod CommandFields CasCommand
+casGcCommand =
+  command "gc" (info (pure CasGc) (progDesc "Perform garbage collection on the CAS"))

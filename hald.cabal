@@ -22,6 +22,7 @@ executable hald
     other-modules:
         Hald.Activate,
         Hald.Assemble.Activate,
+        Hald.Assemble.Cas,
         Hald.Assemble.Create,
         Hald.Assemble.Gc,
         Hald.Assemble.Remove,
