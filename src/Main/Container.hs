@@ -8,9 +8,18 @@ import System.Process (callProcess, readProcess)
 
 mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
-  Util.ioOrDie "Creating container" (void $ Util.quietReadProcess "podman" ["create", "--replace", "--name", podName, podUri] "")
-    >> Util.ioOrDie "Mounting container" (readProcess "podman" ["mount", "ald-root"] [])
-    >>= \podMount -> return $ Util.removeString "\n" podMount
+  Util.ioOrDie
+    "Creating container"
+    ( void $
+        Util.quietReadProcess
+          "podman"
+          ["create", "--replace", "--name", podName, podUri]
+          ""
+    )
+    >> Util.removeString "\n"
+      <$> Util.ioOrDie
+        "Mounting container"
+        (readProcess "podman" ["mount", "ald-root"] [])
 
 umountContainer :: String -> IO ()
 umountContainer podName =

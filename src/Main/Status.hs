@@ -59,8 +59,7 @@ returnOsField field content =
 
 returnKernelVersion :: FilePath -> IO String
 returnKernelVersion fp =
-  listDirectory (takeDirectory fp <> "/modules") >>= \modulesContent ->
-    return . takeBaseName $ unwords modulesContent
+  takeBaseName . unwords <$> listDirectory (takeDirectory fp <> "/modules")
 
 printDepStati :: Config.Config -> IO ()
 printDepStati conf = do

@@ -6,7 +6,6 @@ import Control.Exception (IOException, catch)
 import Data.Char (isSpace)
 import Data.List (sort, sortBy)
 import Data.Maybe (fromMaybe)
-import Data.Maybe qualified
 import Data.Ord (Down (..), comparing)
 import Main.Config qualified as Config
 import Main.Deployment qualified as Dep

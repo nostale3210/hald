@@ -51,7 +51,12 @@ walkDirectory h rootDir currentDir casDir = do
     hPutStrLn h $ "D\t" <> relPath
     walkDirectory h rootDir fullPath casDir
 
-  hashedFiles <- pooledMapConcurrently (\(fp, rp) -> doHash fp casDir >>= \cp -> return (rp, cp)) files
+  hashedFiles <-
+    pooledMapConcurrently
+      ( \(fp, rp) ->
+          (rp,) <$> doHash fp casDir
+      )
+      files
   forM_ hashedFiles $ \(relPath, casPath) ->
     hPutStrLn h $ "F\t" <> relPath <> "\t" <> casPath
 
@@ -59,7 +64,12 @@ walkDirectory h rootDir currentDir casDir = do
     target <- readSymbolicLink fullPath
     hPutStrLn h $ "S\t" <> relPath <> "\t" <> target
 
-  hashedSpecial <- pooledMapConcurrently (\(fp, rp) -> doHash fp casDir >>= \cp -> return (rp, cp)) special
+  hashedSpecial <-
+    pooledMapConcurrently
+      ( \(fp, rp) ->
+          (rp,) <$> doHash fp casDir
+      )
+      special
   forM_ hashedSpecial $ \(relPath, casPath) ->
     hPutStrLn h $ "F\t" <> relPath <> "\t" <> casPath
 
@@ -105,9 +115,9 @@ setImmutableIfFile casDir (_, TreeFile p) = Lock.setImmutable (casDir </> B8.unp
 setImmutableIfFile _ _ = return ()
 
 loadAssetMap :: FilePath -> IO AssetMap
-loadAssetMap path = do
-  content <- BS.readFile path
-  return $ HashMap.fromList [(B8.unpack p, e) | (p, e) <- parseLines content]
+loadAssetMap path =
+  (\content -> HashMap.fromList [(B8.unpack p, e) | (p, e) <- parseLines content])
+    <$> BS.readFile path
 
 makeRelative :: FilePath -> FilePath -> FilePath
 makeRelative root path =

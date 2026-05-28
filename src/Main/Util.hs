@@ -7,6 +7,7 @@ import Control.Exception (IOException, catch, handle, try)
 import Control.Monad (forM, forM_, forever, unless, void, when)
 import Data.ByteString.Char8 qualified as C
 import Data.Either (fromRight)
+import Data.Maybe (isJust)
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory, removeFile)
 import System.Environment (getArgs, getExecutablePath)
 import System.Exit (ExitCode (..))
@@ -125,14 +126,10 @@ relabelSeLinuxPath rootPath contexts bp = do
         quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
 
 getUserId :: IO Int
-getUserId =
-  getRealUserID >>= \uid ->
-    return (read (show uid) :: Int)
+getUserId = fromIntegral <$> getRealUserID
 
 rootCheck :: IO Bool
-rootCheck =
-  getUserId >>= \uid ->
-    return $ uid == 0
+rootCheck = (== 0) <$> getUserId
 
 acquireLock :: FilePath -> IO Bool
 acquireLock fp = do
@@ -176,11 +173,7 @@ checkInteractive :: IO Bool
 checkInteractive = hIsTerminalDevice stdout
 
 checkSystemdInhibit :: IO Bool
-checkSystemdInhibit = do
-  r <- findExecutable "systemd-inhibit"
-  return $ case r of
-    Just _ -> True
-    Nothing -> False
+checkSystemdInhibit = isJust <$> findExecutable "systemd-inhibit"
 
 execWithSystemdInhibit :: IO ()
 execWithSystemdInhibit =
