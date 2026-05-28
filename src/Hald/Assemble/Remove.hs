@@ -1,7 +1,7 @@
 module Hald.Assemble.Remove where
 
 import Control.Exception (onException)
-import Hald.CAS.GC qualified as CasGc
+import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail

@@ -9,7 +9,7 @@ import Control.Concurrent (myThreadId, throwTo)
 import Control.Exception (AsyncException (UserInterrupt))
 import Control.Monad (unless)
 import Data.Maybe qualified
-import Hald.CAS.GC qualified as CasGc
+import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
 import Hald.Container qualified as Container
 import Hald.Deployment qualified as Dep

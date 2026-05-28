@@ -5,7 +5,7 @@ import Control.Monad (unless, when)
 import Data.Maybe (isNothing)
 import Hald.Assemble.Activate qualified as Asac
 import Hald.Assemble.Gc qualified as Asgc
-import Hald.CAS.GC qualified as CasGc
+import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
 import Hald.Container qualified as Container
 import Hald.Create qualified as Create

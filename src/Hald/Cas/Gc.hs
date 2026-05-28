@@ -1,4 +1,4 @@
-module Hald.CAS.GC (collectGarbage, restoreStoreFlags) where
+module Hald.Cas.Gc (collectGarbage, restoreStoreFlags) where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Monad (unless, when)

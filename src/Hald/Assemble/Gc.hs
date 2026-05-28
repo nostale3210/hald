@@ -3,7 +3,7 @@ module Hald.Assemble.Gc where
 import Control.Exception (onException)
 import Control.Monad (when)
 import Data.List (sort)
-import Hald.CAS.GC qualified as CasGc
+import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail

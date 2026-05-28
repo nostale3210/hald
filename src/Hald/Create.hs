@@ -4,8 +4,8 @@ import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Exception (IOException, catch)
 import Control.Monad (void, when)
 import Data.List (nubBy)
-import Data.Maybe (fromMaybe)
-import Hald.CAS.Ingest qualified as CAS
+import Data.Maybe (fromMaybe, listToMaybe)
+import Hald.Cas.Ingest qualified as CAS
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Util (TreeAction (..), WalkStrategy (..))
