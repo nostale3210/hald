@@ -11,6 +11,8 @@ import Control.Monad (forM, forM_, unless)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as B8
 import Data.HashMap.Strict qualified as HashMap
+import Data.List (partition)
+import Data.Maybe (mapMaybe)
 import Main.CAS.Hash qualified as Hash
 import Main.Lock qualified as Lock
 import Main.Util qualified as Util
@@ -42,10 +44,15 @@ walkDirectory h rootDir currentDir casDir = do
     mStat <- Util.tryStat fullPath
     return (fullPath, relPath, mStat)
 
-  let dirs = [(fp, rp) | (fp, rp, Just s) <- classified, isDirectory s]
-      files = [(fp, rp) | (fp, rp, Just s) <- classified, isRegularFile s]
-      syms = [(fp, rp) | (fp, rp, Just s) <- classified, isSymbolicLink s]
-      special = [(fp, rp) | (fp, rp, Just s) <- classified, not (isDirectory s || isRegularFile s || isSymbolicLink s)]
+  let valid = mapMaybe (\(fp, rp, ms) -> (fp,rp,) <$> ms) classified
+      (dirs3, rest1) = partition (\(_, _, s) -> isDirectory s) valid
+      (files3, rest2) = partition (\(_, _, s) -> isRegularFile s) rest1
+      (syms3, special3) = partition (\(_, _, s) -> isSymbolicLink s) rest2
+      dropStatus = map (\(fp, rp, _) -> (fp, rp))
+      dirs = dropStatus dirs3
+      files = dropStatus files3
+      syms = dropStatus syms3
+      special = dropStatus special3
 
   forM_ dirs $ \(fullPath, relPath) -> do
     hPutStrLn h $ "D\t" <> relPath
