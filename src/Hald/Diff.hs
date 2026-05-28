@@ -2,7 +2,7 @@ module Hald.Diff where
 
 import Control.Exception (IOException, catch)
 import Data.Char (isSpace)
-import Data.List (sort, sortBy)
+import Data.List (find, sort, sortBy)
 import Data.Maybe (fromMaybe)
 import Data.Ord (Down (..), comparing)
 import Hald.Config qualified as Config
@@ -15,12 +15,7 @@ import UnliftIO.Async (concurrently)
 
 selectDeployment :: [Int] -> [Int] -> Int
 selectDeployment allDeps selected =
-  case sortBy (comparing Down) allDeps of
-    [] -> 0
-    x : xs ->
-      if x `elem` selected
-        then selectDeployment xs selected
-        else x
+  fromMaybe 0 $ find (`notElem` selected) $ sortBy (comparing Down) allDeps
 
 selectDeps :: Int -> Int -> Config.Config -> IO (Int, Int)
 selectDeps comp compTo conf
