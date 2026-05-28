@@ -3,12 +3,14 @@ module Hald.Space where
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (sort)
+import Data.Maybe (isJust)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
 import System.Directory (removePathForcibly)
 import System.FilePath ((</>))
+import UnliftIO (pooledMapConcurrently_)
 import UnliftIO.Async (pooledForConcurrently_)
 
 rmDep :: Dep.Deployment -> Config.Config -> IO ()
@@ -69,12 +71,7 @@ rmDeps keepDeps deployments conf = do
       rmDep tbRmDep conf
 
 gcBroken :: [Int] -> Config.Config -> IO ()
-gcBroken depIds conf =
-  case depIds of
-    [] -> return ()
-    x : xs -> do
-      checkDep x conf
-      gcBroken xs conf
+gcBroken depIds conf = pooledMapConcurrently_ (`checkDep` conf) depIds
 
 checkDep :: Int -> Config.Config -> IO ()
 checkDep depId conf = do
@@ -114,7 +111,4 @@ checkDep depId conf = do
         >> rmDep dep conf
 
 componentPresent :: Maybe FilePath -> IO Bool
-componentPresent compPath =
-  case compPath of
-    Just _ -> return True
-    Nothing -> return False
+componentPresent = return . isJust
