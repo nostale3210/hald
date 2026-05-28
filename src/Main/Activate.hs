@@ -1,6 +1,5 @@
 module Main.Activate where
 
-import Control.Exception (IOException, catch)
 import Control.Monad (void, when)
 import Main.Deployment qualified as Dep
 import Main.Lock qualified as Lock
@@ -56,16 +55,8 @@ bindMount fromPath toPath =
 
 activateNewRoot :: FilePath -> FilePath -> Dep.Deployment -> IO ()
 activateNewRoot root hp newDep = do
-  idFileContent <-
-    catch
-      (readFile (root <> "/usr/.ald_dep"))
-      ( \e ->
-          let err = show (e :: IOException)
-           in Util.printInfo ("Couldn't read deployment ID; " <> err) False
-                >> return "0"
-      )
-  let oldId = case reads (head $ words idFileContent) of [(n, "")] -> n; _ -> 0
-      newId = Dep.identifier newDep
+  oldId <- Dep.getCurrentDeploymentId root
+  let newId = Dep.identifier newDep
       signalsToBlock = addSignal sigTERM . addSignal sigINT $ emptySignalSet
   usrMounted <- Util.isMountpoint $ root <> "/usr"
   etcMounted <- Util.isMountpoint $ root <> "/etc"
