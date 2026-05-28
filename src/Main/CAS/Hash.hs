@@ -2,16 +2,14 @@ module Main.CAS.Hash (hashFile) where
 
 import BLAKE3 qualified as B3
 import Data.ByteString qualified as BS
-import System.IO (Handle, IOMode (ReadMode), hClose, openFile)
+import System.IO (Handle, IOMode (ReadMode), withFile)
 
 chunkSize :: Int
 chunkSize = 65536
 
 hashFile :: FilePath -> IO String
-hashFile path = do
-  h <- openFile path ReadMode
+hashFile path = withFile path ReadMode $ \h -> do
   digest <- hReadHash h (B3.init Nothing)
-  hClose h
   return $ show digest
 
 hReadHash :: Handle -> B3.Hasher -> IO (B3.Digest B3.DEFAULT_DIGEST_LEN)

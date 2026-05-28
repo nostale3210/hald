@@ -18,7 +18,7 @@ import Main.Lock qualified as Lock
 import Main.Util qualified as Util
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory)
 import System.FilePath (takeDirectory, (</>))
-import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openFile)
+import System.IO (Handle, IOMode (WriteMode), hPutStrLn, withFile)
 import System.Posix.Files (createLink, createSymbolicLink, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
 
@@ -30,10 +30,9 @@ data TreeEntry
 type AssetMap = HashMap.HashMap FilePath TreeEntry
 
 ingestTree :: FilePath -> FilePath -> FilePath -> IO ()
-ingestTree srcDir casDir outputPath = do
-  h <- openFile outputPath WriteMode
-  walkDirectory h srcDir srcDir casDir
-  hClose h
+ingestTree srcDir casDir outputPath =
+  withFile outputPath WriteMode $ \h ->
+    walkDirectory h srcDir srcDir casDir
 
 walkDirectory :: Handle -> FilePath -> FilePath -> FilePath -> IO ()
 walkDirectory h rootDir currentDir casDir = do
