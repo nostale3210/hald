@@ -74,16 +74,18 @@ removeTmpFile file =
              in Util.printInfo ("Couldn't remove temporary files; " <> err) False
         )
 
+mergeFileContents :: String -> String -> String
+mergeFileContents a b =
+  unlines . nubBy (\x y -> Util.takeUntil x ':' == Util.takeUntil y ':') . lines $
+    a <> b
+
 mergeFiles :: FilePath -> FilePath -> FilePath -> IO ()
 mergeFiles inputA inputB outputFile = do
   contentA <- Util.ioOrDie "Reading merge file A" $ readFile inputA
   contentB <- Util.ioOrDie "Reading merge file B" $ readFile inputB
-  let output =
-        unlines
-          . nubBy (\a b -> Util.takeUntil a ':' == Util.takeUntil b ':')
-          . lines
-          $ contentA <> contentB
-  Util.ioOrDie "Writing merged file" $ writeFile outputFile output
+  Util.ioOrDie "Writing merged file" $
+    writeFile outputFile $
+      mergeFileContents contentA contentB
 
 syncMinimumState :: FilePath -> IO ()
 syncMinimumState =
