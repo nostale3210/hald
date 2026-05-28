@@ -1,7 +1,7 @@
 module Hald.Status where
 
 import Control.Exception (IOException, catch)
-import Data.List (isPrefixOf, sort)
+import Data.List (find, isPrefixOf, sort)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Util qualified as Util
@@ -50,12 +50,10 @@ getDepStatus conf dep = do
 
 returnOsField :: String -> [String] -> String
 returnOsField field content =
-  case content of
-    [] -> ""
-    x : xs ->
-      if field `isPrefixOf` x
-        then unwords . tail . words $ Util.replaceString "\"" "" $ Util.replaceString "=" " " x
-        else returnOsField field xs
+  maybe
+    ""
+    (unwords . tail . words . Util.replaceString "\"" "" . Util.replaceString "=" " ")
+    $ find (field `isPrefixOf`) content
 
 returnKernelVersion :: FilePath -> IO String
 returnKernelVersion fp =
@@ -75,11 +73,13 @@ printDepStati conf = do
   printDep (reverse depList) conf
 
 printDep :: [DepStatus] -> Config.Config -> IO ()
-printDep deps conf =
-  case deps of
-    [] -> return ()
-    x : xs -> do
-      currentDepId <- Dep.getCurrentDeploymentId $ Config.rootDir conf
+printDep deps conf = do
+  currentDepId <- Dep.getCurrentDeploymentId $ Config.rootDir conf
+  mapM_ (printOneDep currentDepId) deps
+  where
+    twospaces y = "  " <> y
+    fourspaces y = "    " <> y
+    printOneDep currentDepId x = do
       let status =
             if currentDepId == identifier x
               then "\t(Active)"
@@ -98,7 +98,3 @@ printDep deps conf =
             <> "\n"
             <> fourspaces ("Backend: " <> backend x)
         )
-      printDep xs conf
-      where
-        twospaces y = "  " <> y
-        fourspaces y = "    " <> y
