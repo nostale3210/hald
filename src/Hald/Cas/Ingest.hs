@@ -17,7 +17,7 @@ import Hald.Cas.Hash qualified as Hash
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory)
-import System.FilePath (takeDirectory, (</>))
+import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (Handle, IOMode (WriteMode), hPutStrLn, withFile)
 import System.Posix.Files (createLink, createSymbolicLink, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
@@ -124,19 +124,6 @@ loadAssetMap :: FilePath -> IO AssetMap
 loadAssetMap path =
   (\content -> HashMap.fromList [(B8.unpack p, e) | (p, e) <- parseLines content])
     <$> BS.readFile path
-
-makeRelative :: FilePath -> FilePath -> FilePath
-makeRelative root path =
-  case stripPrefix root path of
-    Just ('/' : rest) -> rest
-    Just rest -> rest
-    Nothing -> path
-
-stripPrefix :: (Eq a) => [a] -> [a] -> Maybe [a]
-stripPrefix [] ys = Just ys
-stripPrefix (x : xs) (y : ys)
-  | x == y = stripPrefix xs ys
-stripPrefix _ _ = Nothing
 
 deployEntry :: FilePath -> FilePath -> (B8.ByteString, TreeEntry) -> IO ()
 deployEntry casDir targetRoot (relPath, entry) = case entry of
