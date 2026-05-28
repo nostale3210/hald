@@ -1,7 +1,7 @@
 module Main.Deployment where
 
 import Control.Exception (IOException, catch)
-import Data.Maybe (listToMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Util qualified as Util
@@ -127,20 +127,26 @@ getDeployment depId conf = do
         bootComponents = bComponents
       }
 
+startsWithDigit :: String -> Bool
+startsWithDigit (d : _) = d `elem` ['0' .. '9']
+startsWithDigit _ = False
+
+startsWithDotDigit :: String -> Bool
+startsWithDotDigit ('.' : d : _) = d `elem` ['0' .. '9']
+startsWithDotDigit _ = False
+
+isNumericConf :: String -> Bool
+isNumericConf f =
+  not (null f)
+    && head f `elem` ['0' .. '9']
+    && let l = length f in l >= 6 && drop (l - 5) f == ".conf"
+
 getDeployments :: Config.Config -> IO [FilePath]
 getDeployments conf = do
   let hp = Config.haldPath conf
       bp = Config.bootPath conf
       ep = bp <> "/loader/entries"
       up = Config.ukiPath conf
-      startsWithDigit (d : _) = d `elem` ['0' .. '9']
-      startsWithDigit _ = False
-      startsWithDotDigit ('.' : d : _) = d `elem` ['0' .. '9']
-      startsWithDotDigit _ = False
-      isNumericConf f =
-        not (null f)
-          && head f `elem` ['0' .. '9']
-          && let l = length f in l >= 6 && drop (l - 5) f == ".conf"
   hpEntries <- Util.listDirSafe hp
   bdEntries <- Util.listDirSafe bp
   beEntries <- Util.listDirSafe ep
@@ -158,20 +164,20 @@ getDeployments conf = do
   return $ Set.toList $ Set.union ukiSet $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
 
 getDeploymentsInt :: Config.Config -> IO [Int]
-getDeploymentsInt conf =
-  getDeployments conf >>= \deployments ->
-    return $ mapMaybe (fmap fst . listToMaybe . reads) deployments
+getDeploymentsInt = fmap (mapMaybe parseId) . getDeployments
+  where
+    parseId s = fmap fst (listToMaybe (reads s))
+
+parseDepId :: String -> Int
+parseDepId = maybe 0 fst . listToMaybe . reads . head . lines
 
 getCurrentDeploymentId :: FilePath -> IO Int
 getCurrentDeploymentId root =
-  catch
-    (readFile (root <> "/usr/.ald_dep"))
-    ( \e ->
-        let err = show (e :: IOException)
-         in Util.printInfo ("Couldn't read deployment ID; " <> err) False
-              >> return "0"
-    )
-    >>= \content ->
-      case reads (head $ lines content) of
-        [(n, "")] -> return n
-        _ -> return 0
+  parseDepId
+    <$> catch
+      (readFile (root <> "/usr/.ald_dep"))
+      ( \e ->
+          let err = show (e :: IOException)
+           in Util.printInfo ("Couldn't read deployment ID; " <> err) False
+                >> return "0"
+      )
