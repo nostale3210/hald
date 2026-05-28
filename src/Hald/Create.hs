@@ -254,18 +254,18 @@ copyContainerFiles conf dep = do
     )
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
-modulePathSearch conf deployment target = do
-  paths <-
-    Util.recursiveFileSearch
-      ( Config.haldPath conf
-          <> "/"
-          <> show (Dep.identifier deployment)
-          <> "/usr/lib/modules"
-      )
-      target
-  case paths of
-    [] -> Util.fatalWith ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment)) ""
-    x : _ -> return x
+modulePathSearch conf deployment target =
+  Util.recursiveFileSearch
+    ( Config.haldPath conf
+        <> "/"
+        <> show (Dep.identifier deployment)
+        <> "/usr/lib/modules"
+    )
+    target
+    >>= maybe
+      (Util.fatalWith ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment)) "")
+      return
+      . listToMaybe
 
 placeBootFiles :: Config.Config -> Dep.Deployment -> IO ()
 placeBootFiles conf deployment = do
@@ -333,11 +333,17 @@ getPackageDB containerPath conf dep =
       >> return ()
 
 setDefaultBootEntry :: Int -> IO ()
-setDefaultBootEntry dep = do
-  r <- findExecutable "bootctl"
-  case r of
-    Nothing -> return ()
-    Just _ ->
-      catch
-        (void $ readProcess "bootctl" ["set-default", "*" <> show dep <> "*"] "")
-        (\e -> let err = show (e :: IOException) in hPutStrLn stderr $ "Failed setting default boot entry: " <> err)
+setDefaultBootEntry dep =
+  findExecutable "bootctl"
+    >>= maybe
+      (return ())
+      ( \_ ->
+          catch
+            ( void $
+                Util.quietReadProcess
+                  "bootctl"
+                  ["set-default", "*" <> show dep <> "*"]
+                  ""
+            )
+            (\e -> let err = show (e :: IOException) in hPutStrLn stderr $ "Failed setting default boot entry: " <> err)
+      )
