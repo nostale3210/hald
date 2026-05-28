@@ -1,7 +1,7 @@
 module Main.CAS.GC (collectGarbage, restoreStoreFlags) where
 
+import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Monad (unless, when)
-import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Lock qualified as Lock
@@ -37,7 +37,7 @@ collectGarbage conf keptDepIds = do
   let hp = Config.haldPath conf
       casDir = hp </> "objects"
       workThreads = max 1 $ div threads 2
-  refSetVar <- newIORef Set.empty
+  refSetVar <- newTVarIO Set.empty
   pooledForConcurrently_ keptDepIds $ \depId ->
     Util.walk
       (ParallelN 2)
@@ -46,11 +46,12 @@ collectGarbage conf keptDepIds = do
             symAction = \_ _ -> return (),
             fileAction = \_ s ->
               when (isRegularFile s) $
-                atomicModifyIORef' refSetVar (\acc -> (Set.insert (deviceID s, fileID s) acc, ()))
+                atomically $
+                  modifyTVar' refSetVar (Set.insert (deviceID s, fileID s))
           }
       )
       (hp </> show depId </> "usr")
-  refSet <- readIORef refSetVar
+  refSet <- readTVarIO refSetVar
 
   dirExists <- doesDirectoryExist casDir
   when dirExists $ do

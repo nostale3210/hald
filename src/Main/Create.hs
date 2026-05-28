@@ -1,8 +1,8 @@
 module Main.Create where
 
+import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Exception (IOException, catch)
 import Control.Monad (void, when)
-import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe)
 import Main.CAS.Ingest qualified as CAS
@@ -112,21 +112,23 @@ syncState depPath = do
 
 collectFiles :: FilePath -> IO [FilePath]
 collectFiles root = do
-  ref <- newIORef []
+  ref <- newTVarIO []
   Util.walk
     (ParallelN 2)
     ( TreeAction
         { dirAction = \_ _ -> return (),
           symAction = \p s ->
             when (modificationTime s /= 0) $
-              atomicModifyIORef' ref (\acc -> (p : acc, ())),
+              atomically $
+                modifyTVar' ref (p :),
           fileAction = \p s ->
             when (modificationTime s /= 0) $
-              atomicModifyIORef' ref (\acc -> (p : acc, ()))
+              atomically $
+                modifyTVar' ref (p :)
         }
     )
     root
-  readIORef ref
+  readTVarIO ref
 
 syncSingleFile :: [FilePath] -> FilePath -> IO ()
 syncSingleFile files destination
