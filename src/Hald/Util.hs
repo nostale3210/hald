@@ -7,6 +7,7 @@ import Control.Exception (IOException, catch, handle, try)
 import Control.Monad (forM, forM_, forever, unless, void, when)
 import Data.ByteString.Char8 qualified as C
 import Data.Either (fromRight)
+import Data.List (isInfixOf)
 import Data.Maybe (isJust)
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory, removeFile)
 import System.Environment (getArgs, getExecutablePath)
@@ -174,6 +175,11 @@ checkInteractive = hIsTerminalDevice stdout
 
 checkSystemdInhibit :: IO Bool
 checkSystemdInhibit = isJust <$> findExecutable "systemd-inhibit"
+
+hasMountBeneath :: IO Bool
+hasMountBeneath = ioOrDefault False $ do
+  (ec, out, _) <- readProcessWithExitCode "mount" ["--help"] ""
+  return $ ec == ExitSuccess && "--beneath" `isInfixOf` out
 
 execWithSystemdInhibit :: IO ()
 execWithSystemdInhibit =
