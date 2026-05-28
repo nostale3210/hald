@@ -31,7 +31,7 @@ assembleAction parser = do
     Cli.Gc -> Asgc.deploymentGcAssemblyPre conf inhibit
     Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf inhibit
     Cli.Cas Cli.CasGc -> Ascas.gcAssemblyPre conf inhibit
-    Cli.Status -> Status.printDepStati conf
+    Cli.Status c -> Status.printDepStati conf c
     Cli.Diff x y -> Diff.printDiff x y conf
   where
     inhibit = not $ Cli.optSystemd parser

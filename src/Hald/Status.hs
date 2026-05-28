@@ -1,6 +1,7 @@
 module Hald.Status where
 
 import Control.Exception (IOException, catch)
+import Control.Monad (forM_)
 import Data.List (find, isPrefixOf, sort)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
@@ -57,10 +58,10 @@ returnOsField field content =
 
 returnKernelVersion :: FilePath -> IO String
 returnKernelVersion fp =
-  takeBaseName . unwords <$> listDirectory (takeDirectory fp <> "/modules")
+  takeBaseName . unwords <$> Util.listDirSafe (takeDirectory fp <> "/modules")
 
-printDepStati :: Config.Config -> IO ()
-printDepStati conf = do
+printDepStati :: Config.Config -> Bool -> IO ()
+printDepStati conf comp = do
   allDeps <- Dep.getDeploymentsInt conf
   let sortedDeps = sort allDeps
   depList <-
@@ -70,31 +71,33 @@ printDepStati conf = do
           conf
           fullDep
   putStrLn "Currently retained deployments:"
-  printDep (reverse depList) conf
+  printDep depList comp conf
 
-printDep :: [DepStatus] -> Config.Config -> IO ()
-printDep deps conf = do
-  currentDepId <- Dep.getCurrentDeploymentId $ Config.rootDir conf
-  mapM_ (printOneDep currentDepId) deps
-  where
-    twospaces y = "  " <> y
-    fourspaces y = "    " <> y
-    printOneDep currentDepId x = do
-      let status =
-            if currentDepId == identifier x
-              then "\t(Active)"
-              else ""
-      putStrLn
-        ( "\n"
-            <> twospaces "Deployment "
-            <> show (identifier x)
-            <> status
-            <> "\n"
-            <> fourspaces (name x)
-            <> "\n"
-            <> fourspaces ("Version: " <> version x)
-            <> "\n"
-            <> fourspaces ("Kernel: " <> kernel x)
-            <> "\n"
-            <> fourspaces ("Backend: " <> backend x)
-        )
+printDep :: [DepStatus] -> Bool -> Config.Config -> IO ()
+printDep deps comp conf =
+  Dep.getCurrentDeploymentId (Config.rootDir conf) >>= \dId ->
+    forM_ deps $ putStrLn . getDepString comp dId
+
+getDepString :: Bool -> Int -> DepStatus -> String
+getDepString comp dId ds =
+  let status = (if dId == identifier ds then "\t(Active)" else "") <> "\n"
+      lead y =
+        if dId == identifier ds
+          then " • " <> y
+          else replicate 3 ' ' <> y
+      sublead y = replicate 5 ' ' <> y
+      depLine = lead "Deployment " <> show (identifier ds)
+      fields = [("Version", version), ("Kernel", kernel), ("Backend", backend)]
+      maxFieldLength = maximum $ map (length . fst) fields
+      fieldLine (name, field) =
+        "\n"
+          <> sublead
+            ( name
+                <> ": "
+                <> replicate (maxFieldLength - length name) ' '
+                <> field ds
+            )
+      fieldLines = concatMap fieldLine fields
+   in if comp
+        then depLine <> " - " <> version ds
+        else "\n" <> depLine <> status <> sublead (name ds) <> fieldLines

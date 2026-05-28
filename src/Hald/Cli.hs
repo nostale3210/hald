@@ -46,7 +46,7 @@ data Command
         casFlag :: Bool
       }
   | Activate Int
-  | Status
+  | Status Bool
   | Diff Int Int
   | Rm Int
   | Gc
@@ -173,7 +173,18 @@ activateOptions =
 
 statusCommand :: Mod CommandFields Command
 statusCommand =
-  command "status" (info (pure Status) (progDesc "Display all deployments and their metadata"))
+  command "status" (info statusOptions (progDesc "Display all deployments and their metadata"))
+
+statusOptions :: Parser Command
+statusOptions =
+  Status
+    <$> flag
+      False
+      True
+      ( long "compact"
+          <> short 'c'
+          <> help "Compact representation"
+      )
 
 diffCommand :: Mod CommandFields Command
 diffCommand =
