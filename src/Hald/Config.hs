@@ -1,6 +1,7 @@
 module Hald.Config where
 
 import Control.Exception (IOException, catch)
+import Data.List (foldl')
 import Hald.Util qualified as Util
 
 data PackageManager
@@ -69,10 +70,7 @@ applyUserConfig conf userConf =
    in applyConfigKeys conf confKeys
 
 applyConfigKeys :: Config -> [[String]] -> Config
-applyConfigKeys conf confKeys =
-  case confKeys of
-    [] -> conf
-    x : xs -> applyConfigKeys (applyConfigKey conf x) xs
+applyConfigKeys = foldl' applyConfigKey
 
 applyConfigKey :: Config -> [String] -> Config
 applyConfigKey conf [] = conf
@@ -103,13 +101,16 @@ updateSingleKey conf key val =
         ]
     "containerUri" -> conf {containerUri = val}
     "localTag" -> conf {localTag = val}
-    "keepDeps" -> conf {keepDeps = case reads val of [(n, "")] -> n; _ -> keepDeps conf}
+    "keepDeps" -> conf {keepDeps = readVal (keepDeps conf) val}
     "rootDir" -> conf {rootDir = val}
-    "interactive" -> conf {interactive = case reads val of [(b, "")] -> b; _ -> interactive conf}
+    "interactive" -> conf {interactive = readVal (interactive conf) val}
     "packageManager" -> conf {packageManager = selectPm val}
     "packageDB" -> conf {packageDB = Just val}
-    "maxThreads" -> conf {maxThreads = case reads val of [(n, "")] -> n; _ -> maxThreads conf}
+    "maxThreads" -> conf {maxThreads = readVal (maxThreads conf) val}
     _ -> conf
+
+readVal :: (Read a) => a -> String -> a
+readVal def s = case reads s of [(v, "")] -> v; _ -> def
 
 selectPm :: String -> PackageManager
 selectPm strMgr =
