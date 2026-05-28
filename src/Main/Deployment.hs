@@ -1,7 +1,7 @@
 module Main.Deployment where
 
 import Control.Exception (IOException, catch)
-import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
+import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Main.Config qualified as Config
 import Main.Util qualified as Util

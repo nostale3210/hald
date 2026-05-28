@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-
 module Main.Diff where
 
 import Control.Exception (IOException, catch)
@@ -17,7 +15,7 @@ import UnliftIO.Async (concurrently)
 
 selectDeployment :: [Int] -> [Int] -> Int
 selectDeployment allDeps selected =
-  case sortBy (comparing Data.Ord.Down) allDeps of
+  case sortBy (comparing Down) allDeps of
     [] -> 0
     x : xs ->
       if x `elem` selected
@@ -94,6 +92,7 @@ listCmd mgr root =
         "xbps-query"
         ["-l", "--rootdir=" <> root]
         (unlines . map (unwords . drop 1 . words) . lines)
+    Config.Unknown -> PkgQuery "" [] id
 
 diffStati :: String -> String -> IO ()
 diffStati from to = do
