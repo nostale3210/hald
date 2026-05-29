@@ -3,7 +3,7 @@ module Hald.Space where
 import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (sort)
-import Data.Maybe (isJust)
+import Data.Maybe (fromMaybe, isJust)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Legacy qualified as Legacy
@@ -32,7 +32,7 @@ rmDep deployment conf = do
             bootComponents
   if Dep.identifier tbRmDep /= currentDepId
     then do
-      Lock.clearRecursiveImmutable (Config.haldPath conf </> show depId)
+      Lock.clearRecursiveImmutable (fromMaybe (Config.haldPath conf </> show depId) (Dep.rootDir tbRmDep))
       mapM_
         (uncurry (rmComponent depId conf))
         [ ("root dir", Dep.rootDir tbRmDep),
