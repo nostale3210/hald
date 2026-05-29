@@ -8,6 +8,7 @@ import Hald.Assemble.Remove qualified as Asrm
 import Hald.Cli qualified as Cli
 import Hald.Config qualified as Config
 import Hald.Diff qualified as Diff
+import Hald.Legacy qualified as Legacy
 import Hald.Status qualified as Status
 import Hald.Util qualified as Util
 import Options.Applicative (execParser)
@@ -23,7 +24,9 @@ assembleAction parser = do
         if interactive
           then Config.applyConfigKey config ["interactive", show interactive]
           else config
-      conf = Config.applyUserConfig config' userConf
+      conf0 = Config.applyUserConfig config' userConf
+  legacyPaths <- Legacy.detectLegacyPaths conf0
+  let conf = conf0 {Config.legacyPaths = legacyPaths}
   Util.setSystemThreads (Config.maxThreads conf)
   case Cli.optCommand parser of
     Cli.Dep a b c d e f g h i -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit g h i

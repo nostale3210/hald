@@ -70,13 +70,13 @@ rm_deps=(
 )
 declare -n rm_dep=rm_deps
 
-init_alds=(
+init_halds=(
     "cp:"
     "ln:"
     "mkdir:"
     "mv:"
 )
-declare -n init_ald=init_alds
+declare -n init_hald=init_halds
 
 up_bootloaders=(
     "cp:"

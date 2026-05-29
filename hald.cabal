@@ -1,60 +1,66 @@
-cabal-version:      3.0
-name:               hald
-version:            0.5.1.3
-synopsis: Container-based system update utility
+cabal-version:   3.0
+name:            hald
+version:         0.5.2.0
+synopsis:        Container-based system update utility
+
 -- description:
-license:            LicenseRef-GLWTPL
-license-file:       LICENSE
-author:             fei
-maintainer:         fei@timesink
+license:         LicenseRef-GLWTPL
+license-file:    LICENSE
+author:          fei
+maintainer:      fei@timesink
+
 -- copyright:
-category:           System
-build-type:         Simple
-extra-doc-files:    CHANGELOG.md
+category:        System
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
+
 -- extra-source-files:
 
 common warnings
-    ghc-options: -Wall
+  ghc-options: -Wall
 
 executable hald
-    import:           warnings
-    main-is:          Main.hs
-    other-modules:
-        Hald.Activate,
-        Hald.Assemble.Activate,
-        Hald.Assemble.Cas,
-        Hald.Assemble.Create,
-        Hald.Assemble.Gc,
-        Hald.Assemble.Remove,
-        Hald.Cas.Gc,
-        Hald.Cas.Hash,
-        Hald.Cas.Ingest,
-        Hald.Cli,
-        Hald.Config,
-        Hald.Container,
-        Hald.Create,
-        Hald.Deployment,
-        Hald.Diff,
-        Hald.Fail,
-        Hald.Lock,
-        Hald.Space,
-        Hald.Status,
-        Hald.Util
-    -- other-extensions:
-    build-depends:
-        base,
-        blake3,
-        bytestring,
-        containers,
-        directory,
-        filelock,
-        filepath,
-        optparse-applicative,
-        process,
-        stm,
-        unix,
-        unliftio,
-        unordered-containers
-    hs-source-dirs:   src
-    default-language: GHC2021
-    ghc-options: -static -O2 -optl-static -optl-pthread -threaded
+  import:           warnings
+  main-is:          Main.hs
+  other-modules:
+    Hald.Activate
+    Hald.Assemble.Activate
+    Hald.Assemble.Cas
+    Hald.Assemble.Create
+    Hald.Assemble.Gc
+    Hald.Assemble.Remove
+    Hald.Cas.Gc
+    Hald.Cas.Hash
+    Hald.Cas.Ingest
+    Hald.Cli
+    Hald.Config
+    Hald.Container
+    Hald.Create
+    Hald.Deployment
+    Hald.Diff
+    Hald.Fail
+    Hald.Legacy
+    Hald.Lock
+    Hald.Space
+    Hald.Status
+    Hald.Util
+
+  -- other-extensions:
+  build-depends:
+    , base
+    , blake3
+    , bytestring
+    , containers
+    , directory
+    , filelock
+    , filepath
+    , optparse-applicative
+    , process
+    , stm
+    , unix
+    , unliftio
+    , unordered-containers
+
+  hs-source-dirs:   src
+  default-language: GHC2021
+  ghc-options:      -static -O2 -optl-static -optl-pthread -threaded

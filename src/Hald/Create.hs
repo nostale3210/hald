@@ -8,6 +8,7 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Hald.Cas.Ingest qualified as CAS
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
+import Hald.Legacy qualified as Legacy
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
 import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, removeFile)
@@ -19,9 +20,9 @@ import UnliftIO.Async (concurrently, pooledForConcurrently_)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
 createSkeleton depId conf uki backend =
-  Util.ensureDirExists (Config.haldPath conf </> show depId)
-    >> writeFile (Config.haldPath conf </> show depId <> "/.backend") (show backend)
-    >> Util.createSymlink "usr/lib" (Config.haldPath conf </> show depId <> "/lib")
+  Util.ensureDirExists (Legacy.treeRootDir conf depId)
+    >> writeFile (Legacy.treeRootDir conf depId <> "/backend") (show backend)
+    >> Util.createSymlink "usr/lib" (Legacy.treeRootDir conf depId <> "/lib")
     >> if uki
       then Util.ensureDirExists (Config.ukiPath conf)
       else Util.ensureDirExists (Config.bootPath conf </> show depId)
@@ -47,14 +48,14 @@ generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
 
 syncSystemConfig :: Bool -> Config.Config -> Dep.Deployment -> IO ()
 syncSystemConfig dropState conf dep = do
-  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
+  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
   if dropState
     then syncMinimumState depPath
     else syncState depPath
   Util.ioOrDie "Syncing system config" $ do
-    void $ readProcess "podman" ["cp", "ald-root:/etc/passwd", depPath <> "/.tmp.passwd"] ""
-    void $ readProcess "podman" ["cp", "ald-root:/etc/shadow", depPath <> "/.tmp.shadow"] ""
-    void $ readProcess "podman" ["cp", "ald-root:/etc/group", depPath <> "/.tmp.group"] ""
+    void $ readProcess "podman" ["cp", "hald-root:/etc/passwd", depPath <> "/.tmp.passwd"] ""
+    void $ readProcess "podman" ["cp", "hald-root:/etc/shadow", depPath <> "/.tmp.shadow"] ""
+    void $ readProcess "podman" ["cp", "hald-root:/etc/group", depPath <> "/.tmp.group"] ""
   mergeFiles "/etc/passwd" (depPath <> "/.tmp.passwd") (depPath <> "/etc/passwd")
     >> removeTmpFile (depPath <> "/.tmp.passwd")
   mergeFiles "/etc/shadow" (depPath <> "/.tmp.shadow") (depPath <> "/etc/shadow")
@@ -177,7 +178,7 @@ syncDeploymentUsr containerMount conf dep linkSource =
 
 syncDeploymentUsrHardlink :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
 syncDeploymentUsrHardlink containerMount conf dep linkSource = do
-  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
+  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
       depUsr = depPath <> "/usr"
   Util.ensureDirExists depUsr
   let rsyncArgs = ["-aHlx", containerMount <> "/usr/", depUsr <> "/"]
@@ -186,24 +187,24 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
         Nothing -> rsyncArgs
   Util.ioOrDie "Syncing deployment /usr" $ void $ readProcess "rsync" rsyncCmd ""
   Util.ioOrDie "Writing deployment marker" $
-    writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep))
+    writeFile (depPath <> "/usr/.hald_dep") (show (Dep.identifier dep))
 
 syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentUsrCas containerMount conf dep = do
-  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
+  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
       casDir = Config.haldPath conf <> "/objects"
       depUsr = depPath <> "/usr"
-      assetMapPath = depPath <> "/.ald_assetmap"
+      assetMapPath = depPath <> "/assetmap"
   Util.ensureDirExists casDir
   Util.ensureDirExists depUsr
   CAS.ingestTree (containerMount <> "/usr") casDir assetMapPath
   CAS.deployTreeFromFile casDir depUsr assetMapPath
   Util.ioOrDie "Writing deployment marker" $
-    writeFile (depPath <> "/usr/.ald_dep") (show (Dep.identifier dep))
+    writeFile (depPath <> "/usr/.hald_dep") (show (Dep.identifier dep))
 
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
-  let depPath = Config.haldPath conf </> show (Dep.identifier dep)
+  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
       depEtc = depPath <> "/etc"
       containerEtc = containerMount <> "/etc"
   Util.ensureDirExists depEtc
@@ -232,7 +233,7 @@ copyTree src dst =
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
 normalizeDepEtcTimestamps conf dep =
-  Util.walk Sequential action (Config.haldPath conf </> show (Dep.identifier dep) <> "/etc")
+  Util.walk Sequential action (Legacy.treeRootDir conf (Dep.identifier dep) <> "/etc")
   where
     action =
       TreeAction
@@ -241,29 +242,21 @@ normalizeDepEtcTimestamps conf dep =
           fileAction = \p _ -> setFileTimesHiRes p 0 0
         }
 
-copyContainerFiles :: Config.Config -> Dep.Deployment -> IO ()
-copyContainerFiles conf dep = do
-  let hp = Config.haldPath conf
-      depId = Dep.identifier dep
-  catch
-    (void $ Util.quietReadProcess "podman" ["cp", "-a", "ald-root:/files", hp <> "/." <> show depId] "")
-    ( \(_ :: IOException) ->
-        catch
-          (writeFile (hp <> "/." <> show depId) "")
-          (\(_ :: IOException) -> Util.fatal "")
-    )
+writeLockfile :: Config.Config -> Dep.Deployment -> IO ()
+writeLockfile conf dep = do
+  let depId = Dep.identifier dep
+  Util.ioOrDie "Writing lockfile" $ writeFile (Legacy.treeLockfile conf depId) ""
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
 modulePathSearch conf deployment target =
   Util.recursiveFileSearch
-    ( Config.haldPath conf
-        <> "/"
-        <> show (Dep.identifier deployment)
-        <> "/usr/lib/modules"
-    )
+    (Legacy.treeRootDir conf (Dep.identifier deployment) <> "/usr/lib/modules")
     target
     >>= maybe
-      (Util.fatalWith ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment)) "")
+      ( Util.fatalWith
+          ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment))
+          ""
+      )
       return
       . listToMaybe
 
@@ -317,9 +310,7 @@ getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 getPackageDB containerPath conf dep =
   Util.ioOrDie "Fetching package database" $
     Util.ensureDirExists
-      ( Config.haldPath conf
-          <> "/"
-          <> show (Dep.identifier dep)
+      ( Legacy.treeRootDir conf (Dep.identifier dep)
           <> "/"
           <> takeDirectory (fromMaybe "" (Config.packageDB conf))
       )

@@ -4,6 +4,7 @@ import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Monad (unless, when)
 import Data.Set qualified as Set
 import Hald.Config qualified as Config
+import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
@@ -38,19 +39,23 @@ collectGarbage conf keptDepIds = do
       casDir = hp </> "objects"
       workThreads = max 1 $ div threads 2
   refSetVar <- newTVarIO Set.empty
-  pooledForConcurrently_ keptDepIds $ \depId ->
-    Util.walk
-      (ParallelN 2)
-      ( TreeAction
-          { dirAction = \_ _ -> return (),
-            symAction = \_ _ -> return (),
-            fileAction = \_ s ->
-              when (isRegularFile s) $
-                atomically $
-                  modifyTVar' refSetVar (Set.insert (deviceID s, fileID s))
-          }
-      )
-      (hp </> show depId </> "usr")
+  pooledForConcurrently_ keptDepIds $ \depId -> do
+    mRoot <- Legacy.resolveRootDir conf depId
+    case mRoot of
+      Just root ->
+        Util.walk
+          (ParallelN 2)
+          ( TreeAction
+              { dirAction = \_ _ -> return (),
+                symAction = \_ _ -> return (),
+                fileAction = \_ s ->
+                  when (isRegularFile s) $
+                    atomically $
+                      modifyTVar' refSetVar (Set.insert (deviceID s, fileID s))
+              }
+          )
+          (root </> "usr")
+      Nothing -> return ()
   refSet <- readTVarIO refSetVar
 
   dirExists <- doesDirectoryExist casDir

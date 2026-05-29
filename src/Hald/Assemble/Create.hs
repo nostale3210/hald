@@ -54,7 +54,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
             if build
               then Config.applyConfigKey conf ["containerUri", Config.localTag conf]
               else conf
-      containerMount <- Container.mountContainer "ald-root" $ Config.containerUri pbConf
+      containerMount <- Container.mountContainer "hald-root" $ Config.containerUri pbConf
 
       Create.createSkeleton (Dep.identifier newDep) pbConf uki backend
 
@@ -72,11 +72,11 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
 
       unless (isNothing (Config.packageDB pbConf)) $
         Create.getPackageDB containerMount pbConf newDep
-      Container.umountContainer "ald-root"
+      Container.umountContainer "hald-root"
 
-      Util.printProgress msgCont "Copying container files..."
-      Create.copyContainerFiles pbConf newDep
-      Container.rmContainer "ald-root"
+      Util.printProgress msgCont "Writing lockfile..."
+      Create.writeLockfile pbConf newDep
+      Container.rmContainer "hald-root"
 
       Util.printProgress msgCont "Placing kernel and initramfs..."
       if uki
