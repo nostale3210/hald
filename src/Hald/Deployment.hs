@@ -103,7 +103,7 @@ getDeployment depId conf = do
   rDir <- Legacy.resolveRootDir conf depId
   let markerFile = case rDir of
         Just d -> d <> "/backend"
-        Nothing -> Config.haldPath conf </> show depId <> "/backend"
+        Nothing -> Legacy.treeRootDir conf depId <> "/backend"
   rDirExists <- case rDir of
     Just d -> Util.pathExists d
     Nothing -> return False
