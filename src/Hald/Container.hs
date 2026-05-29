@@ -19,7 +19,7 @@ mountContainer podName podUri =
     >> Util.removeString "\n"
       <$> Util.ioOrDie
         "Mounting container"
-        (readProcess "podman" ["mount", "ald-root"] [])
+        (readProcess "podman" ["mount", "hald-root"] [])
 
 umountContainer :: String -> IO ()
 umountContainer podName =

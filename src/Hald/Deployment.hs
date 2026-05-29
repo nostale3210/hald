@@ -1,9 +1,9 @@
 module Hald.Deployment where
 
-import Control.Exception (IOException, catch)
-import Data.Maybe (listToMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Hald.Config qualified as Config
+import Hald.Legacy qualified as Legacy
 import Hald.Util qualified as Util
 import System.Directory (doesDirectoryExist)
 import System.FilePath ((</>))
@@ -34,8 +34,8 @@ createDeployment exDeps conf backend =
    in Deployment
         { identifier = depId,
           backend = backend,
-          lockfile = Just (Config.haldPath conf <> "/." <> show depId),
-          rootDir = Just (Config.haldPath conf </> show depId),
+          lockfile = Just (Legacy.treeLockfile conf depId),
+          rootDir = Just (Legacy.treeRootDir conf depId),
           bootComponents = createBootPaths depId conf
         }
 
@@ -99,14 +99,19 @@ getBootComponents depId conf = do
 
 getDeployment :: Int -> Config.Config -> IO Deployment
 getDeployment depId conf = do
-  let lFile = Config.haldPath conf <> "/." <> show depId
-      rDir = Config.haldPath conf </> show depId
-      markerFile = rDir <> "/.backend"
-  lFileExists <- Util.pathExists lFile
-  rDirExists <- Util.pathExists rDir
+  lFile <- Legacy.resolveLockfile conf depId
+  rDir <- Legacy.resolveRootDir conf depId
+  let markerFile = case rDir of
+        Just d -> d <> "/backend"
+        Nothing -> Config.haldPath conf </> show depId <> "/backend"
+  rDirExists <- case rDir of
+    Just d -> Util.pathExists d
+    Nothing -> return False
   rDirIsDir <-
     if rDirExists
-      then doesDirectoryExist rDir
+      then case rDir of
+        Just d -> doesDirectoryExist d
+        Nothing -> return False
       else return False
   markerExists <- Util.pathExists markerFile
   backend <-
@@ -122,18 +127,10 @@ getDeployment depId conf = do
     Deployment
       { identifier = depId,
         backend = backend,
-        lockfile = if lFileExists then Just lFile else Nothing,
-        rootDir = if rDirExists && rDirIsDir then Just rDir else Nothing,
+        lockfile = lFile,
+        rootDir = if rDirExists && rDirIsDir then rDir else Nothing,
         bootComponents = bComponents
       }
-
-startsWithDigit :: String -> Bool
-startsWithDigit (d : _) = d `elem` ['0' .. '9']
-startsWithDigit _ = False
-
-startsWithDotDigit :: String -> Bool
-startsWithDotDigit ('.' : d : _) = d `elem` ['0' .. '9']
-startsWithDotDigit _ = False
 
 isNumericConf :: String -> Bool
 isNumericConf f =
@@ -143,41 +140,25 @@ isNumericConf f =
 
 getDeployments :: Config.Config -> IO [FilePath]
 getDeployments conf = do
-  let hp = Config.haldPath conf
-      bp = Config.bootPath conf
+  let bp = Config.bootPath conf
       ep = bp <> "/loader/entries"
       up = Config.ukiPath conf
-  hpEntries <- Util.listDirSafe hp
+  depIds <- Legacy.findDeploymentIds conf
   bdEntries <- Util.listDirSafe bp
   beEntries <- Util.listDirSafe ep
   ukiEntries <- Util.listDirSafe up
-  let lockfiles = map (hp </>) $ filter startsWithDotDigit hpEntries
-      rootDirs = map (hp </>) $ filter startsWithDigit hpEntries
-      bootDirs = map (bp </>) $ filter startsWithDigit bdEntries
+  let bootDirs = map (bp </>) $ filter Util.startsWithDigit bdEntries
       bootEntrys = map (ep </>) $ filter isNumericConf beEntries
-      ukis = map (up </>) $ filter startsWithDotDigit ukiEntries
-      lockSet = Set.fromList $ map (Util.removeString "." . Util.removeString (hp <> "/")) lockfiles
-      rootSet = Set.fromList $ map (Util.removeString (hp <> "/")) rootDirs
+      ukis = map (up </>) $ filter Util.startsWithDotDigit ukiEntries
       bootDSet = Set.fromList $ map (Util.removeString (bp <> "/")) bootDirs
       bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (ep <> "/")) bootEntrys
       ukiSet = Set.fromList $ map (Util.removeString ".efi" . Util.removeString (up <> "/")) ukis
-  return $ Set.toList $ Set.union ukiSet $ Set.union bootESet . Set.union bootDSet . Set.union lockSet $ rootSet
+  return $ Set.toList $ Set.union ukiSet $ Set.union bootESet . Set.union bootDSet $ Set.fromList (map show depIds)
 
 getDeploymentsInt :: Config.Config -> IO [Int]
 getDeploymentsInt = fmap (mapMaybe parseId) . getDeployments
   where
     parseId s = fmap fst (listToMaybe (reads s))
 
-parseDepId :: String -> Int
-parseDepId = maybe 0 fst . listToMaybe . reads . head . lines
-
 getCurrentDeploymentId :: FilePath -> IO Int
-getCurrentDeploymentId root =
-  parseDepId
-    <$> catch
-      (readFile (root <> "/usr/.ald_dep"))
-      ( \e ->
-          let err = show (e :: IOException)
-           in Util.printInfo ("Couldn't read deployment ID; " <> err) False
-                >> return "0"
-      )
+getCurrentDeploymentId root = Data.Maybe.fromMaybe 0 <$> Legacy.readDepLockfile root

@@ -12,9 +12,16 @@ data PackageManager
   | Unknown
   deriving (Show, Eq)
 
+newtype LegacyPaths = LegacyPaths {legacyPath :: Maybe FilePath}
+  deriving (Show, Eq)
+
+noLegacyPaths :: LegacyPaths
+noLegacyPaths = LegacyPaths Nothing
+
 data Config
   = Config
   { haldPath :: FilePath,
+    legacyPaths :: LegacyPaths,
     bootPath :: FilePath,
     ukiPath :: FilePath,
     configPath :: FilePath,
@@ -33,7 +40,8 @@ data Config
 defaultConfig :: Config
 defaultConfig =
   Config
-    { haldPath = "/.ald",
+    { haldPath = "/.hald",
+      legacyPaths = noLegacyPaths,
       bootPath = "/boot",
       ukiPath = bootPath defaultConfig <> "/EFI/Linux",
       configPath = "/etc/hald",

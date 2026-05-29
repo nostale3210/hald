@@ -3,11 +3,11 @@ module Hald.Status where
 import Control.Exception (IOException, catch)
 import Control.Monad (forM_)
 import Data.List (find, isPrefixOf, sort)
+import Data.Maybe (fromMaybe)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Util qualified as Util
-import System.Directory (listDirectory)
-import System.FilePath (takeBaseName, takeDirectory, (</>))
+import System.FilePath (takeBaseName, takeDirectory)
 import UnliftIO.Async (forConcurrently)
 
 data DepStatus
@@ -23,10 +23,11 @@ data DepStatus
 getDepStatus :: Config.Config -> Dep.Deployment -> IO DepStatus
 getDepStatus conf dep = do
   currentDepId <- Dep.getCurrentDeploymentId $ Config.rootDir conf
-  let osReleasePath =
+  let depRoot = fromMaybe "" (Dep.rootDir dep)
+      osReleasePath =
         if currentDepId == Dep.identifier dep
           then Config.rootDir conf <> "/usr/lib/os-release"
-          else Config.haldPath conf </> show (Dep.identifier dep) <> "/usr/lib/os-release"
+          else depRoot <> "/usr/lib/os-release"
   osReleaseExists <- Util.pathExists osReleasePath
   osReleaseContent <-
     if osReleaseExists

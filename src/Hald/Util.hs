@@ -64,7 +64,15 @@ newIdentifier :: [Int] -> Int
 newIdentifier idents =
   case idents of
     [] -> 0
-    _ : _ -> succ $ maximum idents
+    _ -> succ $ maximum idents
+
+startsWithDigit :: String -> Bool
+startsWithDigit (d : _) = d `elem` ['0' .. '9']
+startsWithDigit _ = False
+
+startsWithDotDigit :: String -> Bool
+startsWithDotDigit ('.' : d : _) = d `elem` ['0' .. '9']
+startsWithDotDigit _ = False
 
 pathExists :: FilePath -> IO Bool
 pathExists path = ioOrDefault False $ doesPathExist path
@@ -190,7 +198,7 @@ execWithSystemdInhibit =
             "systemd-inhibit"
             True
             ( "--what=idle:sleep:shutdown"
-                : "--who=ald-rootful-ops"
+                : "--who=hald-rootful-ops"
                 : "--why=Managing deployments"
                 : "--"
                 : execPath

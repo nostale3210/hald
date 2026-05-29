@@ -6,6 +6,7 @@ import Data.List (sort)
 import Data.Maybe (isJust)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
+import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
 import System.Directory (removePathForcibly)
@@ -82,28 +83,35 @@ checkDep depId conf = do
   bootEntryExists <- componentPresent $ Dep.bootEntry bootComps
   ukiExists <- componentPresent $ Dep.ukiPath bootComps
   lockfileExists <- componentPresent $ Dep.lockfile dep
-  idFileExists <- Util.pathExists $ Config.haldPath conf </> show depId <> "/usr/.ald_dep"
+  idFileExists <- case Dep.rootDir dep of
+    Just r -> do
+      mMarker <- Legacy.readDepLockfile r
+      case mMarker of
+        Just _ -> return True
+        Nothing -> return False
+    Nothing -> return False
   if rootDirExists
-    && (bootDirExists || ukiExists)
-    && (bootEntryExists || ukiExists)
+    && ((bootDirExists && bootEntryExists) || ukiExists)
     && lockfileExists
     && idFileExists
-    then do
-      idFileContent <- readFile $ Config.haldPath conf </> show depId <> "/usr/.ald_dep"
-      let savedId = case reads (head $ lines idFileContent) of [(n, "")] -> n; _ -> 0
-      when
-        (savedId /= depId)
-        $ catch
-          ( writeFile
-              (Config.haldPath conf </> show depId <> "/usr/.ald_dep")
-              (show depId)
-          )
-          ( \e ->
-              let err = show (e :: IOException)
-               in Util.printInfo
-                    ("Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err)
-                    (Config.interactive conf)
-          )
+    then case Dep.rootDir dep of
+      Just r -> do
+        mSavedId <- Legacy.readDepLockfile r
+        case mSavedId of
+          Just savedId
+            | savedId /= depId -> do
+                let markerPath = r <> "/usr/.hald_dep"
+                catch
+                  (writeFile markerPath (show depId))
+                  ( \e ->
+                      let err = show (e :: IOException)
+                       in Util.printInfo
+                            ("Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err)
+                            (Config.interactive conf)
+                  )
+            | otherwise -> return ()
+          Nothing -> return ()
+      Nothing -> return ()
     else
       Util.printInfo
         ("Collecting broken deployment " <> show depId <> "...")

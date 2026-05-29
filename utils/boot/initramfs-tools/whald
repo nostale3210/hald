@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -oue pipefail
 
-# -k should never be used with whald
 if [[ "$1" == "--uki" ]]; then
     BUILD_UKI="y"
     shift
@@ -20,16 +19,34 @@ case $1 in
 esac
 
 INITPREFIX="${INITPREFIX:-init}"
-ALDPATH="${ALDPATH:-/.ald}"
+HALDPATH="${HALDPATH:-/.hald}"
+ALDPATH="${ALDPATH:-/.ald}"  # LEGACY: fallback for old deployments
 BOOTPATH="${BOOTPATH:-/boot}"
 UKIPATH="${UKIPATH:-/boot/EFI/Linux}"
 
 hald "$@"
 
-deployment="$(find "${ALDPATH:?}" -maxdepth 1 -mindepth 1 -type d -name "[0-9]*" | rev | cut -d"/" -f1 | rev | sort -nr | head -n1)"
-kver="$(ls "${ALDPATH:?}/${deployment:?}/usr/lib/modules")"
+# LEGACY: try new trees/ first, then flat haldPath, then legacy aldPath
+deployment=""
+dep_root=""
+if [[ -d "$HALDPATH/trees" ]]; then
+    deployment="$(find "$HALDPATH/trees" -maxdepth 1 -mindepth 1 -type d -name "[0-9]*" | rev | cut -d"/" -f1 | rev | sort -nr | head -n1)"
+    [[ -n "$deployment" ]] && dep_root="$HALDPATH/trees"
+fi
+if [[ -z "$deployment" ]] && [[ -d "$HALDPATH" ]]; then
+    deployment="$(find "$HALDPATH" -maxdepth 1 -mindepth 1 -type d -name "[0-9]*" | rev | cut -d"/" -f1 | rev | sort -nr | head -n1)"
+    [[ -n "$deployment" ]] && dep_root="$HALDPATH"
+fi
+if [[ -z "$deployment" ]] && [[ -d "$ALDPATH" ]]; then
+    deployment="$(find "$ALDPATH" -maxdepth 1 -mindepth 1 -type d -name "[0-9]*" | rev | cut -d"/" -f1 | rev | sort -nr | head -n1)"
+    [[ -n "$deployment" ]] && dep_root="$ALDPATH"
+fi
 
-mount -o bind "${ALDPATH:?}/${deployment:?}/usr/lib/modules" /usr/lib/modules
+[[ -z "$deployment" ]] && { printf "No deployment found!\n" ; exit 1 ; }
+
+kver="$(ls "${dep_root:?}/${deployment:?}/usr/lib/modules")"
+
+mount -o bind "${dep_root:?}/${deployment:?}/usr/lib/modules" /usr/lib/modules
 
 rm -f "${BOOTPATH:?}/${deployment:?}/initramfs.img" || \
     { rm -rf "${BOOTPATH:?}/${deployment:?}" ; exit 1 ; }

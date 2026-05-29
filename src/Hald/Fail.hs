@@ -7,16 +7,16 @@ where
 
 import Control.Concurrent (myThreadId, throwTo)
 import Control.Exception (AsyncException (UserInterrupt))
-import Control.Monad (unless)
+import Control.Monad (forM_, unless)
 import Data.Maybe qualified
 import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
 import Hald.Container qualified as Container
 import Hald.Deployment qualified as Dep
+import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Space qualified as Space
 import Hald.Util qualified as Util
-import System.FilePath ((</>))
 import System.Posix.Signals (Handler (CatchInfoOnce), Signal, installHandler)
 
 installAsyncHandler :: [Signal] -> IO ()
@@ -30,7 +30,8 @@ cleanupOnError conf dep mMsgCont = do
     Just mc -> Util.printProgress mc "Fatal error. Cleaning up..."
     Nothing -> return ()
   let pending = Data.Maybe.fromMaybe Dep.dummyDeployment dep
-  Lock.umountDirForcibly Lock.Rfl $ Config.haldPath conf </> show (Dep.identifier pending)
+  depRoot <- Legacy.resolveRootDir conf (Dep.identifier pending)
+  forM_ depRoot $ Lock.umountDirForcibly Lock.Rfl
   deployments <- Dep.getDeploymentsInt conf
   Space.gcBroken deployments conf
   failAndCleanup pending conf
@@ -39,6 +40,6 @@ failAndCleanup :: Dep.Deployment -> Config.Config -> IO ()
 failAndCleanup dep conf = do
   unless (Dep.identifier dep == -1) $ Space.rmDep dep conf
   CasGc.restoreStoreFlags conf
-  Container.umountContainer "ald-root"
-  Container.rmContainer "ald-root"
+  Container.umountContainer "hald-root"
+  Container.rmContainer "hald-root"
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf

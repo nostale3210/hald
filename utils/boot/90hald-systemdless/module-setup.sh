@@ -1,7 +1,7 @@
 #!/bin/bash
 
 check() {
-    if [[ -x /usr/libexec/ald-boot.sh ]]; then
+    if [[ -x /usr/libexec/hald-boot.sh ]]; then
         return 255
     fi
 
@@ -16,11 +16,11 @@ depends() {
 
 install() {
 
-    inst_multiple /usr/libexec/ald-boot.sh \
+    inst_multiple /usr/libexec/hald-boot.sh \
         hald \
         move-mount
 
-    inst_hook pre-pivot 40 "$moddir/ald-hook.sh"
+    inst_hook pre-pivot 40 "$moddir/hald-hook.sh"
 
     # Dependencies
 }
