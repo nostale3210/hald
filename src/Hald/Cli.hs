@@ -5,9 +5,10 @@ import Options.Applicative
     Mod,
     Parser,
     ParserInfo,
+    ReadM,
     argument,
-    auto,
     command,
+    eitherReader,
     flag,
     footer,
     fullDesc,
@@ -24,6 +25,12 @@ import Options.Applicative
     strOption,
     value,
   )
+
+positiveInt :: ReadM Int
+positiveInt = eitherReader $ \s ->
+  case reads s of
+    [(n, "")] | n >= 0 -> Right n
+    _ -> Left "Expected a non-negative integer"
 
 data GlobalOpts = GlobalOpts
   { optRootdir :: !String,
@@ -157,7 +164,7 @@ rmCommand =
 
 rmOptions :: Parser Command
 rmOptions =
-  Rm <$> argument auto (metavar "ID")
+  Rm <$> argument positiveInt (metavar "ID")
 
 gcCommand :: Mod CommandFields Command
 gcCommand =
@@ -169,7 +176,7 @@ activateCommand =
 
 activateOptions :: Parser Command
 activateOptions =
-  Activate <$> argument auto (metavar "ID")
+  Activate <$> argument positiveInt (metavar "ID")
 
 statusCommand :: Mod CommandFields Command
 statusCommand =
@@ -193,8 +200,8 @@ diffCommand =
 diffOptions :: Parser Command
 diffOptions =
   Diff
-    <$> option auto (long "from" <> short 'f' <> help "First deployment (optional)" <> value 0 <> metavar "ID")
-    <*> option auto (long "to" <> short 't' <> help "Second deployment (optional)" <> value 0 <> metavar "ID")
+    <$> option positiveInt (long "from" <> short 'f' <> help "First deployment (optional)" <> value 0 <> metavar "ID")
+    <*> option positiveInt (long "to" <> short 't' <> help "Second deployment (optional)" <> value 0 <> metavar "ID")
 
 casCommand :: Mod CommandFields Command
 casCommand =
