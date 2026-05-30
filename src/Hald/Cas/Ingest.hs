@@ -16,9 +16,9 @@ import Data.Maybe (mapMaybe)
 import Hald.Cas.Hash qualified as Hash
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
-import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory)
+import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory, removeFile, renameFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
-import System.IO (Handle, IOMode (WriteMode), hPutStrLn, withFile)
+import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openTempFile, withFile)
 import System.Posix.Files (createLink, createSymbolicLink, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
 
@@ -89,8 +89,13 @@ doHash srcPath casDir = do
   Lock.setMutable destDir
   destExists <- doesFileExist destPath
   unless destExists $ do
-    Util.ioOrPass $ copyFile srcPath destPath
-    Lock.setImmutable destPath
+    (tmpPath, tmpHandle) <- openTempFile destDir ".hald_tmp"
+    hClose tmpHandle
+    Util.ioOrPass $ copyFile srcPath tmpPath
+    renameResult <- Util.safeCall $ renameFile tmpPath destPath
+    case renameResult of
+      Just _ -> Lock.setImmutable destPath
+      Nothing -> removeFile tmpPath
   return (prefix </> hashStr)
 
 deployTreeFromFile :: FilePath -> FilePath -> FilePath -> IO ()
