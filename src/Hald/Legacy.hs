@@ -72,32 +72,29 @@ findDeploymentIds :: Config.Config -> IO [Int]
 findDeploymentIds conf = do
   let hp = Config.haldPath conf
       lp = Config.legacyPaths conf
-  treeDirs <- Util.listDirSafe (hp </> "trees")
-  treeLockfiles <- Util.listDirSafe (hp </> "trees")
-  hpDirs <- Util.listDirSafe hp
-  hpLockfiles <- Util.listDirSafe hp
-  let fromTree = extractIds treeDirs treeLockfiles
-      fromFlat = extractIds hpDirs hpLockfiles
+  treePaths <- Util.listDirSafe (hp </> "trees")
+  hpPaths <- Util.listDirSafe hp
+  let fromTree = extractIds treePaths
+      fromFlat = extractIds hpPaths
       combined = Set.union fromTree fromFlat
   idsWithLegacy <-
     case Config.legacyPath lp of
       Nothing -> return combined
       Just lp' -> do
-        legacyDirs <- Util.listDirSafe lp'
-        legacyLockfiles <- Util.listDirSafe lp'
-        let fromLegacy = extractIds legacyDirs legacyLockfiles
+        legacyPaths' <- Util.listDirSafe lp'
+        let fromLegacy = extractIds legacyPaths'
         return $ Set.union combined fromLegacy
   return $ Set.toList idsWithLegacy
   where
-    extractIds dirs lockfiles =
+    extractIds paths =
       let dirSet =
             Set.fromList $
               mapMaybe (parseId . filter (`notElem` ['.', '/'])) $
-                filter Util.startsWithDigit dirs
+                filter Util.startsWithDigit paths
           lfSet =
             Set.fromList $
               mapMaybe (parseId . filter (`notElem` ['.', '/'])) $
-                filter Util.startsWithDotDigit lockfiles
+                filter Util.startsWithDotDigit paths
        in Set.union dirSet lfSet
     parseId s = fmap fst (listToMaybe . reads $ s)
 

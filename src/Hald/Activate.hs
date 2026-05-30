@@ -5,6 +5,8 @@ import Control.Monad (unless, void, when)
 import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
+import System.Directory (removePathForcibly)
+import System.FilePath ((</>))
 import System.Posix.Signals (addSignal, blockSignals, emptySignalSet, sigINT, sigTERM, unblockSignals)
 import System.Process (readProcess)
 import UnliftIO.Async (concurrently)
@@ -23,8 +25,20 @@ legacyMoveMountBeneath :: FilePath -> FilePath -> IO ()
 legacyMoveMountBeneath fromPath toPath =
   void $ Util.quietReadProcess "move-mount" ["-mb", fromPath, toPath] ""
 
+ensureOverlayEmptyDir :: FilePath -> IO ()
+ensureOverlayEmptyDir hp = do
+  let emptyDir = hp <> "/empty"
+  Util.ensureDirExists emptyDir
+  dirContents <- Util.listDirSafe emptyDir
+  unless (null dirContents) $ do
+    Lock.setMutable emptyDir
+    mapM_ (removePathForcibly . (emptyDir </>)) dirContents
+  Lock.setImmutable emptyDir
+
 usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
-usrOverlayMount hp fromPath toPath =
+usrOverlayMount hp fromPath toPath = do
+  ensureOverlayEmptyDir hp
+  let emptyDir = hp <> "/empty"
   Util.ioOrDie "Mounting overlay usr" $
     void $
       readProcess
@@ -34,7 +48,7 @@ usrOverlayMount hp fromPath toPath =
           "usr-root",
           "--make-private",
           "-o",
-          "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
+          "lowerdir=" <> fromPath <> ":" <> emptyDir,
           toPath
         ]
         ""
