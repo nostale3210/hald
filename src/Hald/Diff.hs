@@ -1,6 +1,6 @@
 module Hald.Diff where
 
-import Control.Exception (IOException, catch)
+import Control.Exception (finally)
 import Data.Char (isSpace)
 import Data.List (find, sort, sortBy)
 import Data.Maybe (fromMaybe)
@@ -8,6 +8,7 @@ import Data.Ord (Down (..), comparing)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Util qualified as Util
+import System.Directory (getTemporaryDirectory, removeFile)
 import System.Exit (ExitCode (..))
 import System.IO (hClose, openTempFile)
 import System.Process (readProcessWithExitCode)
@@ -91,20 +92,18 @@ listCmd mgr root =
 
 diffStati :: String -> String -> IO ()
 diffStati from to = do
-  (tmpFrom, hFrom) <- openTempFile "/tmp" "hald_from"
-  (tmpTo, hTo) <- openTempFile "/tmp" "hald_to"
+  tmpDir <- getTemporaryDirectory
+  (tmpFrom, hFrom) <- openTempFile tmpDir "hald_diff"
+  (tmpTo, hTo) <- openTempFile tmpDir "hald_diff"
   hClose hFrom
   hClose hTo
-  catch
+  finally
     ( do
         writeFile tmpFrom (unlines . sort . lines $ from)
         writeFile tmpTo (unlines . sort . lines $ to)
+        (ec, diffOutput, _) <- readProcessWithExitCode "diff" ["-y", tmpFrom, tmpTo] ""
+        case ec of
+          ExitSuccess -> putStrLn "No difference found."
+          _ -> putStr . unlines . filter (any (`elem` "|><")) . lines $ diffOutput
     )
-    ( \e ->
-        let _ = show (e :: IOException)
-         in putStrLn "Failed to create temporary files. Is /tmp writable?"
-    )
-  (ec, diffOutput, _) <- readProcessWithExitCode "diff" ["-y", tmpFrom, tmpTo] ""
-  case ec of
-    ExitSuccess -> putStrLn "No difference found."
-    _ -> putStr . unlines . filter (any (`elem` "|><")) . lines $ diffOutput
+    (removeFile tmpFrom >> removeFile tmpTo)
