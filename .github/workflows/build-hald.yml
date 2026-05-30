@@ -1,8 +1,12 @@
 name: build-hald-utils
 on:
   pull_request:
-    schedule:
-      - cron: '0 0 1 1/2 *'
+    paths:
+      - 'src/**'
+      - 'utils/**'
+      - 'Containerfile'
+      - '.github/workflows/build-hald.yml'
+      - 'hald.cabal'
   push:
     branches:
       - "main"
@@ -12,6 +16,8 @@ on:
       - 'Containerfile'
       - '.github/workflows/build-hald.yml'
       - 'hald.cabal'
+  schedule:
+    - cron: '0 0 1 1/2 *'
   workflow_dispatch:
 
 env:
@@ -21,6 +27,7 @@ jobs:
   build-and-push:
     name: Build and push image
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
@@ -30,16 +37,17 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Enable sigstore
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          IMAGE_REG: ${{ env.IMAGE_REGISTRY }}
         shell: bash
         run: |
           sudo mkdir -p /etc/containers/registries.d
-          sudo touch /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
-          echo "docker:" | sudo tee /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
-          echo "  ${{ env.IMAGE_REGISTRY }}:" | sudo tee -a /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
-          echo "    use-sigstore-attachments: true" | sudo tee -a /etc/containers/registries.d/"${{ github.repository_owner }}".yaml
+          printf "docker:\n  %s:\n    use-sigstore-attachments: true\n" "$IMAGE_REG" \
+            | sudo tee /etc/containers/registries.d/"$REPO_OWNER".yaml
 
       - name: Gather environment variables
         shell: bash
@@ -51,23 +59,21 @@ jobs:
         shell: bash
         run: |
           SRC="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "PR_TAG=${SRC}:pr-${{ github.event.number }}" >> $GITHUB_ENV
-          else
-            echo "DATE_TAG=${SRC}:$(date +%Y%m%d)" >> $GITHUB_ENV
-            echo "LATEST_TAG=${SRC}:latest" >> $GITHUB_ENV
-          fi
+          echo "DATE_TAG=${SRC}:$(date +%Y%m%d)" >> $GITHUB_ENV
+          echo "LATEST_TAG=${SRC}:latest" >> $GITHUB_ENV
 
-      - name: Retrieve keys
+      - name: Prepare signing key
+        env:
+          SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
         run: |
-          mkdir -p /tmp/certs || echo "dir exists"
-          echo "${{ secrets.SIGNING_SECRET }}" > /tmp/certs/SIGNING_SECRET.key
+          mkdir -p /dev/shm/certs
+          echo "$SIGNING_SECRET" > /dev/shm/certs/SIGNING_SECRET.key
 
       - name: Build image
         shell: bash
         run: |
           podman create --privileged -ti --name build \
-            --mount type=bind,src=/tmp/certs,dst=/tmp/certs \
+            --mount type=bind,src=/dev/shm/certs,dst=/tmp/certs \
             --mount type=bind,src=/etc/containers/registries.d,dst=/etc/containers/registries.d \
             --mount type=bind,src=./Containerfile,dst=/Containerfile \
             --mount type=bind,src=cosign.pub,dst=/cosign.pub \
@@ -92,20 +98,11 @@ jobs:
             -f ./Containerfile
 
       - name: Push image
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           podman exec --privileged build \
             podman login --username="${{ github.actor }}" --password="${{ secrets.GITHUB_TOKEN }}" ghcr.io
-
-          push_pr() {
-            FAILED=()
-            podman exec --privileged build \
-              podman push "localhost/hald-utils" "${{ env.PR_TAG }}" \
-              --compression-format="zstd:chunked" --tls-verify=true || FAILED+=("PR")
-            if [[ "${{ github.event_name }}" == "pull_request" && "${FAILED[*]}" == *"PR"* ]]; then
-              echo "PR failed!" && return 1
-            else return 0; fi
-          }
 
           push_tag() {
             TAG="$1"
@@ -114,7 +111,7 @@ jobs:
               podman push "localhost/hald-utils" "${TAGS[$TAG]}" \
               --compression-format="zstd:chunked" --tls-verify=true \
               --sign-by-sigstore-private-key=/tmp/certs/SIGNING_SECRET.key || FAILED+=("$TAG")
-            if [[ "${FAILED[*]}" == *"DATE"* && "${{ github.event_name }}" != "pull_request" ]]; then
+            if [[ "${FAILED[*]}" == *"DATE"* ]]; then
               echo "Pushing "${TAGS[$TAG]}" failed!" && return 1
             elif [[ -n "${{ env.LATEST_TAG }}" && "${FAILED[*]}" == *"LATEST"* ]]; then
               echo "Pushing "${TAGS[$TAG]}" failed!" && return 1
@@ -125,13 +122,14 @@ jobs:
             ["DATE"]="${{ env.DATE_TAG }}"
             ["LATEST"]="${{ env.LATEST_TAG }}"
           )
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then push_pr;
-          else
-            for TAG in "${!TAGS[@]}"; do
-              for try in {1..3}; do
-                if push_tag "$TAG"; then break; fi
-                echo "Try $try out of 3 exhausted!"
-                sleep 15
-              done
+          for TAG in "${!TAGS[@]}"; do
+            for try in {1..3}; do
+              if push_tag "$TAG"; then break; fi
+              echo "Try $try out of 3 exhausted!"
+              sleep 15
             done
-          fi
+          done
+
+          # Cleanup signing key
+          podman exec build rm -f /tmp/certs/SIGNING_SECRET.key
+          rm -f /dev/shm/certs/SIGNING_SECRET.key
