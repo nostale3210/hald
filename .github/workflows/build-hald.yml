@@ -27,7 +27,7 @@ jobs:
   build-and-push:
     name: Build and push image
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write
