@@ -29,7 +29,7 @@ deploymentGcAssembly conf msgCont = do
   newAllDeps <- Dep.getDeploymentsInt conf
   Space.rmDeps (Config.keepDeps conf) newAllDeps conf
   remainingDeps <- Dep.getDeploymentsInt conf
-  when (sort allDeps /= sort remainingDeps) $ do
+  when (sort allDeps /= sort remainingDeps) $
     CasGc.collectGarbage conf remainingDeps
-    CasGc.restoreStoreFlags conf
+  CasGc.restoreStoreFlags conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
