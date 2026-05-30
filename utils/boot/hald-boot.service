@@ -1,7 +1,7 @@
 [Unit]
 Description=Swap hald deployment on boot
 DefaultDependencies=no
-ConditionKernelCommandLine=hald.boot|ald.boot
+ConditionKernelCommandLine=hald.boot
 ConditionPathExists=/etc/initrd-release
 After=sysroot.mount
 Requires=sysroot.mount
