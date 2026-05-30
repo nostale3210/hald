@@ -36,9 +36,7 @@ ensureOverlayEmptyDir hp = do
   Lock.setImmutable emptyDir
 
 usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
-usrOverlayMount hp fromPath toPath = do
-  ensureOverlayEmptyDir hp
-  let emptyDir = hp <> "/empty"
+usrOverlayMount hp fromPath toPath =
   Util.ioOrDie "Mounting overlay usr" $
     void $
       readProcess
@@ -48,7 +46,7 @@ usrOverlayMount hp fromPath toPath = do
           "usr-root",
           "--make-private",
           "-o",
-          "lowerdir=" <> fromPath <> ":" <> emptyDir,
+          "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
           toPath
         ]
         ""

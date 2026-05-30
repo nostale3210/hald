@@ -21,6 +21,7 @@ deploymentActivationAssembly :: Int -> Config.Config -> Util.MessageContainer ->
 deploymentActivationAssembly newDepId conf msgCont = do
   Util.printInfo ("Activating deployment " <> show newDepId <> "...") (Util.interactive msgCont)
   Util.printProgress msgCont ("Activating deployment " <> show newDepId <> "...")
+  Activate.ensureOverlayEmptyDir (Config.haldPath conf)
   haldMounted <- Util.isMountpoint (Config.haldPath conf)
 
   newDep <-
