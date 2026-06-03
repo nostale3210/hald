@@ -1,6 +1,6 @@
 module Hald.Lock where
 
-import Control.Exception (IOException, catch)
+import Control.Exception (IOException, bracket, catch)
 import Control.Monad (unless, void, when)
 import Data.Bits (shiftL, (.|.))
 import Foreign.C.String (CString, withCString)
@@ -30,6 +30,9 @@ foreign import ccall unsafe "unistd.h close"
 
 foreign import ccall unsafe "sys/ioctl.h ioctl"
   c_ioctl :: CInt -> CULong -> Ptr CLong -> IO CInt
+
+foreign import ccall unsafe "sys/ioctl.h ioctl"
+  c_ioctl_int :: CInt -> CULong -> CInt -> IO CInt
 
 setFileFlag :: FilePath -> CInt -> IO ()
 setFileFlag path flag =
@@ -115,3 +118,25 @@ umountDirForcibly opts dirPath = do
     Util.ioOrPass $
       void $
         readProcess "umount" ["-" <> show opts, dirPath] ""
+
+ficloneRequest :: CULong
+ficloneRequest =
+  (1 `shiftL` 30) .|. (4 `shiftL` 16) .|. (0x94 `shiftL` 8) .|. 9
+
+-- FICLONE = _IOW(0x94, 9, int) from <linux/fs.h>
+
+ficlone :: FilePath -> FilePath -> IO Bool
+ficlone src dst = clone `catch` \(_ :: IOException) -> return False
+  where
+    clone = bracket (openRead src) cClose $ \s ->
+      if s < 0
+        then return False
+        else bracket (openWrite dst) cClose $ \d ->
+          if d < 0
+            then return False
+            else do
+              r <- c_ioctl_int d ficloneRequest (fromIntegral s)
+              return (r == 0)
+    openRead p = withCString p $ \c -> c_open c 0
+    openWrite p = withCString p $ \c -> c_open c 1
+    cClose fd = when (fd >= 0) $ void $ c_close fd
