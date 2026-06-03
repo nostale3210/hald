@@ -4,6 +4,8 @@ import Control.Exception (IOException, catch)
 import Control.Monad (void)
 import Hald.Config qualified as Config
 import Hald.Util qualified as Util
+import System.Directory (doesFileExist)
+import System.FilePath ((</>))
 import System.Process (callProcess, readProcess)
 
 mountContainer :: String -> String -> IO FilePath
@@ -70,3 +72,30 @@ pullImage conf = do
       Util.ioOrDie "Pulling image" $ callProcess "podman" ["pull", uri]
       Util.printInfo "Image pull completed." (Config.interactive conf)
       return True
+
+getLayerInfo :: String -> IO [FilePath]
+getLayerInfo name = do
+  lower <-
+    Util.removeString "\n"
+      <$> Util.ioOrDie
+        "Getting container layer directories"
+        ( readProcess
+            "podman"
+            ["inspect", "--format", "{{index .GraphDriver.Data \"LowerDir\"}}", name]
+            ""
+        )
+  return $ reverse $ splitOn ':' lower
+  where
+    splitOn _ [] = []
+    splitOn c s =
+      let (w, r) = break (== c) s
+       in w : case r of
+            [] -> []
+            (_ : t) -> splitOn c t
+
+findInLayers :: [FilePath] -> FilePath -> IO (Maybe FilePath)
+findInLayers [] _ = return Nothing
+findInLayers (d : ds) relPath = do
+  let candidate = d </> relPath
+  e <- doesFileExist candidate
+  if e then return (Just candidate) else findInLayers ds relPath
