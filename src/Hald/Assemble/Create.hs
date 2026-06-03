@@ -60,7 +60,8 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
       Create.createSkeleton (Dep.identifier newDep) pbConf uki backend
 
       Util.printProgress msgCont "Syncing deployment usr..."
-      Create.syncDeploymentUsr containerMount pbConf newDep linkSource
+      layerDiffs <- Container.getLayerInfo "hald-root"
+      Create.syncDeploymentUsr containerMount pbConf newDep linkSource layerDiffs
 
       Util.printProgress msgCont "Syncing deployment etc..."
       Create.syncDeploymentEtc containerMount pbConf newDep

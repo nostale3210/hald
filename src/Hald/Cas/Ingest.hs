@@ -14,6 +14,7 @@ import Data.HashMap.Strict qualified as HashMap
 import Data.List (partition)
 import Data.Maybe (mapMaybe)
 import Hald.Cas.Hash qualified as Hash
+import Hald.Container (findInLayers)
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory, removeFile, renameFile)
@@ -29,13 +30,15 @@ data TreeEntry
 
 type AssetMap = HashMap.HashMap FilePath TreeEntry
 
-ingestTree :: FilePath -> FilePath -> FilePath -> IO ()
-ingestTree srcDir casDir outputPath =
+ingestTree :: FilePath -> FilePath -> FilePath -> FilePath -> [FilePath] -> IO ()
+ingestTree containerRoot subDir casDir outputPath layerDiffs =
   withFile outputPath WriteMode $ \h ->
-    walkDirectory h srcDir srcDir casDir
+    walkDirectory h srcDir srcDir casDir subDir layerDiffs
+  where
+    srcDir = containerRoot </> subDir
 
-walkDirectory :: Handle -> FilePath -> FilePath -> FilePath -> IO ()
-walkDirectory h rootDir currentDir casDir = do
+walkDirectory :: Handle -> FilePath -> FilePath -> FilePath -> FilePath -> [FilePath] -> IO ()
+walkDirectory h rootDir currentDir casDir subDir layerDiffs = do
   contents <- listDirectory currentDir
   classified <- forM contents $ \name -> do
     let fullPath = currentDir </> name
@@ -55,12 +58,12 @@ walkDirectory h rootDir currentDir casDir = do
 
   forM_ dirs $ \(fullPath, relPath) -> do
     hPutStrLn h $ "D\t" <> relPath
-    walkDirectory h rootDir fullPath casDir
+    walkDirectory h rootDir fullPath casDir subDir layerDiffs
 
   hashedFiles <-
     pooledMapConcurrently
       ( \(fp, rp) ->
-          (rp,) <$> doHash fp casDir
+          (rp,) <$> doHash fp rootDir subDir layerDiffs casDir
       )
       files
   forM_ hashedFiles $ \(relPath, casPath) ->
@@ -73,14 +76,14 @@ walkDirectory h rootDir currentDir casDir = do
   hashedSpecial <-
     pooledMapConcurrently
       ( \(fp, rp) ->
-          (rp,) <$> doHash fp casDir
+          (rp,) <$> doHash fp rootDir subDir layerDiffs casDir
       )
       special
   forM_ hashedSpecial $ \(relPath, casPath) ->
     hPutStrLn h $ "F\t" <> relPath <> "\t" <> casPath
 
-doHash :: FilePath -> FilePath -> IO FilePath
-doHash srcPath casDir = do
+doHash :: FilePath -> FilePath -> FilePath -> [FilePath] -> FilePath -> IO FilePath
+doHash srcPath rootDir subDir layerDiffs casDir = do
   hashStr <- Hash.hashFile srcPath
   let prefix = take 2 hashStr
       destDir = casDir </> prefix
@@ -91,7 +94,14 @@ doHash srcPath casDir = do
   unless destExists $ do
     (tmpPath, tmpHandle) <- openTempFile destDir ".hald_tmp"
     hClose tmpHandle
-    Util.ioOrPass $ copyFile srcPath tmpPath
+    let relPath = makeRelative rootDir srcPath
+        layerPath = subDir </> relPath
+    mBacking <- findInLayers layerDiffs layerPath
+    Util.ioOrPass $ case mBacking of
+      Just backing -> do
+        ok <- Lock.ficlone backing tmpPath
+        unless ok $ copyFile srcPath tmpPath
+      Nothing -> copyFile srcPath tmpPath
     renameResult <- Util.safeCall $ renameFile tmpPath destPath
     case renameResult of
       Just _ -> Lock.setImmutable destPath
