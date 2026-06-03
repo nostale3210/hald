@@ -170,11 +170,11 @@ syncSingle path target = Util.walk Sequential action path
             copyFileWithMetadata p d
         }
 
-syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
-syncDeploymentUsr containerMount conf dep linkSource =
+syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> [FilePath] -> IO ()
+syncDeploymentUsr containerMount conf dep linkSource layerDiffs =
   case Dep.backend dep of
     Dep.Hardlink -> syncDeploymentUsrHardlink containerMount conf dep linkSource
-    Dep.Cas -> syncDeploymentUsrCas containerMount conf dep
+    Dep.Cas -> syncDeploymentUsrCas containerMount conf dep layerDiffs
 
 syncDeploymentUsrHardlink :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
 syncDeploymentUsrHardlink containerMount conf dep linkSource = do
@@ -189,15 +189,15 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
   Util.ioOrDie "Writing deployment marker" $
     writeFile (depPath <> "/usr/.hald_dep") (show (Dep.identifier dep))
 
-syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
-syncDeploymentUsrCas containerMount conf dep = do
+syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> [FilePath] -> IO ()
+syncDeploymentUsrCas containerMount conf dep layerDiffs = do
   let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
       casDir = Config.haldPath conf <> "/objects"
       depUsr = depPath <> "/usr"
       assetMapPath = depPath <> "/assetmap"
   Util.ensureDirExists casDir
   Util.ensureDirExists depUsr
-  CAS.ingestTree (containerMount <> "/usr") casDir assetMapPath
+  CAS.ingestTree containerMount "usr" casDir assetMapPath layerDiffs
   CAS.deployTreeFromFile casDir depUsr assetMapPath
   Util.ioOrDie "Writing deployment marker" $
     writeFile (depPath <> "/usr/.hald_dep") (show (Dep.identifier dep))
