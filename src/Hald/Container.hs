@@ -84,7 +84,7 @@ getLayerInfo name = do
             ["inspect", "--format", "{{index .GraphDriver.Data \"LowerDir\"}}", name]
             ""
         )
-  return $ reverse $ splitOn ':' lower
+  return $ filter (not . null) $ splitOn ':' lower
   where
     splitOn _ [] = []
     splitOn c s =
