@@ -101,7 +101,7 @@ doHash srcPath rootDir subDir layerDiffs casDir = do
       Just backing -> do
         ok <- Lock.ficlone backing tmpPath
         if ok
-          then Lock.copyMetadata backing tmpPath
+          then Lock.copyMetadata srcPath tmpPath
           else Util.ioOrPass $ copyFileWithMetadata srcPath tmpPath
       Nothing -> Util.ioOrPass $ copyFileWithMetadata srcPath tmpPath
     renameResult <- Util.safeCall $ renameFile tmpPath destPath
