@@ -10,6 +10,7 @@ import Foreign.Ptr (Ptr)
 import Foreign.Storable (poke, sizeOf)
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
+import System.Posix.Files (accessTimeHiRes, fileGroup, fileMode, fileOwner, getFileStatus, modificationTimeHiRes, setFileMode, setFileTimesHiRes, setOwnerAndGroup)
 import System.Process (readProcess)
 
 fsIocSetflags :: CULong
@@ -140,3 +141,10 @@ ficlone src dst = clone `catch` \(_ :: IOException) -> return False
     openRead p = withCString p $ \c -> c_open c 0
     openWrite p = withCString p $ \c -> c_open c 1
     cClose fd = when (fd >= 0) $ void $ c_close fd
+
+copyMetadata :: FilePath -> FilePath -> IO ()
+copyMetadata src dst = do
+  st <- getFileStatus src
+  setFileMode dst (fileMode st)
+  Util.ioOrPass $ setOwnerAndGroup dst (fileOwner st) (fileGroup st)
+  Util.ioOrPass $ setFileTimesHiRes dst (accessTimeHiRes st) (modificationTimeHiRes st)

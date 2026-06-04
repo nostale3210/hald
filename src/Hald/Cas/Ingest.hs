@@ -17,7 +17,7 @@ import Hald.Cas.Hash qualified as Hash
 import Hald.Container (findInLayers)
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
-import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory, removeFile, renameFile)
+import System.Directory (copyFileWithMetadata, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory, removeFile, renameFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openTempFile, withFile)
 import System.Posix.Files (createLink, createSymbolicLink, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
@@ -97,11 +97,13 @@ doHash srcPath rootDir subDir layerDiffs casDir = do
     let relPath = makeRelative rootDir srcPath
         layerPath = subDir </> relPath
     mBacking <- findInLayers layerDiffs layerPath
-    Util.ioOrPass $ case mBacking of
+    case mBacking of
       Just backing -> do
         ok <- Lock.ficlone backing tmpPath
-        unless ok $ copyFile srcPath tmpPath
-      Nothing -> copyFile srcPath tmpPath
+        if ok
+          then Lock.copyMetadata backing tmpPath
+          else Util.ioOrPass $ copyFileWithMetadata srcPath tmpPath
+      Nothing -> Util.ioOrPass $ copyFileWithMetadata srcPath tmpPath
     renameResult <- Util.safeCall $ renameFile tmpPath destPath
     case renameResult of
       Just _ -> Lock.setImmutable destPath
