@@ -145,6 +145,6 @@ ficlone src dst = clone `catch` \(_ :: IOException) -> return False
 copyMetadata :: FilePath -> FilePath -> IO ()
 copyMetadata src dst = do
   st <- getFileStatus src
-  setFileMode dst (fileMode st)
   Util.ioOrPass $ setOwnerAndGroup dst (fileOwner st) (fileGroup st)
+  setFileMode dst (fileMode st)
   Util.ioOrPass $ setFileTimesHiRes dst (accessTimeHiRes st) (modificationTimeHiRes st)
