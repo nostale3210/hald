@@ -1,51 +1,18 @@
+{-# LANGUAGE CApiFFI #-}
+
 module Hald.Lock where
 
 import Control.Exception (IOException, bracket, catch)
 import Control.Monad (unless, void, when)
-import Data.Bits (shiftL, (.|.))
 import Foreign.C.String (CString, withCString)
 import Foreign.C.Types (CInt (..), CLong (..), CULong (..))
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr)
-import Foreign.Storable (poke, sizeOf)
+import Foreign.Storable (poke)
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
 import System.Posix.Files (accessTimeHiRes, fileGroup, fileMode, fileOwner, getFileStatus, modificationTimeHiRes, setFileMode, setFileTimesHiRes, setOwnerAndGroup)
 import System.Process (readProcess)
-
-fsIocSetflags :: CULong
-fsIocSetflags =
-  (1 `shiftL` 30)
-    .|. (fromIntegral (fromEnum 'f') `shiftL` 8)
-    .|. (fromIntegral (2 :: CInt) `shiftL` 0)
-    .|. (fromIntegral (sizeOf (undefined :: CLong)) `shiftL` 16)
-
-fsImmutableFl :: CInt
-fsImmutableFl = 0x00000010
-
-foreign import ccall unsafe "fcntl.h open"
-  c_open :: CString -> CInt -> IO CInt
-
-foreign import ccall unsafe "unistd.h close"
-  c_close :: CInt -> IO CInt
-
-foreign import ccall unsafe "sys/ioctl.h ioctl"
-  c_ioctl :: CInt -> CULong -> Ptr CLong -> IO CInt
-
-foreign import ccall unsafe "sys/ioctl.h ioctl"
-  c_ioctl_int :: CInt -> CULong -> CInt -> IO CInt
-
-setFileFlag :: FilePath -> CInt -> IO ()
-setFileFlag path flag =
-  withCString path $ \cpath -> do
-    fd <- c_open cpath 0
-    when (fd >= 0) $ do
-      alloca $ \p -> do
-        poke p (fromIntegral flag :: CLong)
-        _ <- c_ioctl fd fsIocSetflags p
-        return ()
-      _ <- c_close fd
-      return ()
 
 data ReadMode
   = Ro
@@ -120,11 +87,38 @@ umountDirForcibly opts dirPath = do
       void $
         readProcess "umount" ["-" <> show opts, dirPath] ""
 
-ficloneRequest :: CULong
-ficloneRequest =
-  (1 `shiftL` 30) .|. (4 `shiftL` 16) .|. (0x94 `shiftL` 8) .|. 9
+foreign import capi "linux/fs.h value FS_IOC_SETFLAGS"
+  fsIocSetflags :: CULong
 
--- FICLONE = _IOW(0x94, 9, int) from <linux/fs.h>
+foreign import capi "linux/fs.h value FS_IMMUTABLE_FL"
+  fsImmutableFl :: CInt
+
+foreign import capi "fcntl.h open"
+  c_open :: CString -> CInt -> IO CInt
+
+foreign import capi "unistd.h close"
+  c_close :: CInt -> IO CInt
+
+foreign import capi "sys/ioctl.h ioctl"
+  c_ioctl :: CInt -> CULong -> Ptr CLong -> IO CInt
+
+foreign import capi "sys/ioctl.h ioctl"
+  c_ioctl_int :: CInt -> CULong -> CInt -> IO CInt
+
+setFileFlag :: FilePath -> CInt -> IO ()
+setFileFlag path flag =
+  withCString path $ \cpath -> do
+    fd <- c_open cpath 0
+    when (fd >= 0) $ do
+      alloca $ \p -> do
+        poke p (fromIntegral flag :: CLong)
+        _ <- c_ioctl fd fsIocSetflags p
+        return ()
+      _ <- c_close fd
+      return ()
+
+foreign import capi "linux/fs.h value FICLONE"
+  ficloneRequest :: CULong
 
 ficlone :: FilePath -> FilePath -> IO Bool
 ficlone src dst = clone `catch` \(_ :: IOException) -> return False
