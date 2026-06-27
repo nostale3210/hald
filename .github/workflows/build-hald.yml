@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
 
 env:
-    IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+    IMAGE_REGISTRY: docker.io/${{ github.repository_owner }}
 
 jobs:
   build-and-push:
@@ -58,7 +58,7 @@ jobs:
         id: generate-tags
         shell: bash
         run: |
-          SRC="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
+          SRC="docker://${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
           echo "DATE_TAG=${SRC}:$(date +%Y%m%d)" >> $GITHUB_ENV
           echo "LATEST_TAG=${SRC}:latest" >> $GITHUB_ENV
 
@@ -102,7 +102,7 @@ jobs:
         shell: bash
         run: |
           podman exec --privileged build \
-            podman login --username="${{ github.actor }}" --password="${{ secrets.GITHUB_TOKEN }}" ghcr.io
+            podman login --username="${{ github.actor }}" --password="${{ secrets.DOCKERHUB_TOKEN }}" docker.io
 
           push_tag() {
             TAG="$1"
