@@ -20,7 +20,7 @@ import Hald.Util qualified as Util
 import System.Directory (copyFileWithMetadata, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory, removeFile, renameFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openTempFile, withFile)
-import System.Posix.Files (createLink, createSymbolicLink, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
+import System.Posix.Files (createLink, createSymbolicLink, fileSize, getSymbolicLinkStatus, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
 
 data TreeEntry
@@ -110,13 +110,13 @@ doHash srcPath rootDir subDir layerDiffs casDir = do
       Nothing -> removeFile tmpPath
   return (prefix </> hashStr)
 
-deployTreeFromFile :: FilePath -> FilePath -> FilePath -> IO ()
-deployTreeFromFile casDir targetRoot assetMapFile = do
+deployTreeFromFile :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
+deployTreeFromFile casDir targetRoot emptyFile assetMapFile = do
   content <- BS.readFile assetMapFile
   let entries = parseLines content
   pooledMapConcurrently_ (setMutableIfFile casDir) entries
   createDirectoryIfMissing True targetRoot
-  pooledMapConcurrently_ (deployEntry casDir targetRoot) entries
+  pooledMapConcurrently_ (deployEntry casDir targetRoot emptyFile) entries
   pooledMapConcurrently_ (setImmutableIfFile casDir) entries
 
 parseLines :: BS.ByteString -> [(B8.ByteString, TreeEntry)]
@@ -142,8 +142,8 @@ loadAssetMap path =
   (\content -> HashMap.fromList [(B8.unpack p, e) | (p, e) <- parseLines content])
     <$> BS.readFile path
 
-deployEntry :: FilePath -> FilePath -> (B8.ByteString, TreeEntry) -> IO ()
-deployEntry casDir targetRoot (relPath, entry) = case entry of
+deployEntry :: FilePath -> FilePath -> FilePath -> (B8.ByteString, TreeEntry) -> IO ()
+deployEntry casDir targetRoot emptyFile (relPath, entry) = case entry of
   TreeDir -> createDirectoryIfMissing True (targetRoot </> B8.unpack relPath)
   TreeSymlink target -> do
     let targetPath = targetRoot </> B8.unpack relPath
@@ -157,4 +157,7 @@ deployEntry casDir targetRoot (relPath, entry) = case entry of
     targetExists <- doesFileExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
-      createLink casPath targetPath
+      stat <- getSymbolicLinkStatus casPath
+      if fileSize stat == 0
+        then createLink emptyFile targetPath
+        else createLink casPath targetPath
