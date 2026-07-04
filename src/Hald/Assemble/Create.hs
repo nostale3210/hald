@@ -96,6 +96,9 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
           (Legacy.treeRootDir pbConf (Dep.identifier newDep))
           "/etc/selinux/targeted/contexts/files/file_contexts"
           (Config.bootPath pbConf)
+        when cas $ do
+          Lock.setImmutable $ Legacy.treeRootDir pbConf (Dep.identifier newDep) </> "empty"
+          Lock.setImmutable $ Legacy.treeRootDir pbConf (Dep.identifier newDep) </> "usr/.hald_dep"
 
       when sb $ do
         Util.printProgress msgCont ("Signing deployment " <> show (Dep.identifier newDep) <> " kernel...")

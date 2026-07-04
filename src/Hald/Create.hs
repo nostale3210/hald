@@ -9,6 +9,7 @@ import Hald.Cas.Ingest qualified as CAS
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Legacy qualified as Legacy
+import Hald.Lock qualified as Lock
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
 import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, removeFile)
@@ -195,12 +196,17 @@ syncDeploymentUsrCas containerMount conf dep layerDiffs = do
       casDir = Config.haldPath conf <> "/objects"
       depUsr = depPath <> "/usr"
       assetMapPath = depPath <> "/assetmap"
+      emptyFile = depPath <> "/empty"
   Util.ensureDirExists casDir
   Util.ensureDirExists depUsr
+  Util.ioOrDie "Creating canonical empty file" $ writeFile emptyFile ""
   CAS.ingestTree containerMount "usr" casDir assetMapPath layerDiffs
-  CAS.deployTreeFromFile casDir depUsr assetMapPath
-  Util.ioOrDie "Writing deployment marker" $
-    writeFile (depPath <> "/usr/.hald_dep") (show (Dep.identifier dep))
+  CAS.deployTreeFromFile casDir depUsr emptyFile assetMapPath
+  Lock.setImmutable emptyFile
+  Util.ioOrDie "Writing deployment marker" $ do
+    let depMarker = depPath <> "/usr/.hald_dep"
+    writeFile depMarker (show (Dep.identifier dep))
+    Lock.setImmutable depMarker
 
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
