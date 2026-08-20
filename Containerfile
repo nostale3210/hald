@@ -24,9 +24,13 @@ RUN cd /hald-build && \
         --enable-optimization=2 --install-method=copy --overwrite-policy=always && \
     strip -s /hald
 
-FROM alpine:latest AS target
+
+FROM scratch AS target
 
 COPY --from=build /hald /app/hald
 COPY --from=build /move-mount /app/move-mount
 COPY utils/boot /app/boot
 COPY utils/tools /app/tools
+
+ENTRYPOINT ["/app/hald"]
+CMD ["--help"]
