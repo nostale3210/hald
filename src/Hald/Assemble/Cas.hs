@@ -1,4 +1,4 @@
-module Hald.Assemble.Cas (gcAssemblyPre, fsverityAssemblyPre) where
+module Hald.Assemble.Cas (gcAssemblyPre, gcAssembly, fsverityAssemblyPre) where
 
 import Control.Exception (onException)
 import Hald.Cas.Gc qualified as CasGc
