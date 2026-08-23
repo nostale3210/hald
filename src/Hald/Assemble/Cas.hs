@@ -1,4 +1,4 @@
-module Hald.Assemble.Cas (gcAssemblyPre) where
+module Hald.Assemble.Cas (gcAssemblyPre, fsverityAssemblyPre) where
 
 import Control.Exception (onException)
 import Hald.Cas.Gc qualified as CasGc
@@ -24,4 +24,18 @@ gcAssembly conf msgCont = do
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
   CasGc.collectGarbage conf allDeps
   CasGc.restoreStoreFlags conf
+  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
+
+fsverityAssemblyPre :: Config.Config -> Bool -> IO ()
+fsverityAssemblyPre conf inhibit = do
+  msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
+  Fail.installAsyncHandler [sigINT, sigTERM]
+  flip onException (Fail.cleanupOnError conf Nothing (Just msgCont)) $
+    fsverityAssembly conf msgCont
+
+fsverityAssembly :: Config.Config -> Util.MessageContainer -> IO ()
+fsverityAssembly conf msgCont = do
+  Util.printProgress msgCont "Enabling fs-verity on all CAS objects..."
+  Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
+  CasGc.enableFsVerityOnCas conf
   Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
