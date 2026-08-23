@@ -1,7 +1,7 @@
 module Hald.Cas.Gc (collectGarbage, restoreStoreFlags, enableFsVerityOnCas) where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
-import Control.Exception (bracket_)
+import Control.Exception (IOException, bracket_, catch)
 import Control.Monad (unless, when)
 import Data.Set qualified as Set
 import Hald.Config qualified as Config
@@ -78,6 +78,7 @@ collectGarbage conf keptDepIds = do
     prefixes <- listDirectory casDir
     pooledForConcurrentlyN_ 2 prefixes $ \p -> do
       let casPath = casDir </> p
+      Lock.setMutable casPath
       objects <- listDirectory casPath
       pooledForConcurrentlyN_ workThreads objects $ \o -> do
         let casObj = casPath </> o
@@ -87,7 +88,12 @@ collectGarbage conf keptDepIds = do
             let ino = (deviceID stat, fileID stat)
             unless (ino `Set.member` refSet) $ do
               Lock.setMutable casObj
-              Util.ioOrPass $ removeFile casObj
+              catch
+                (removeFile casObj)
+                ( \e -> do
+                    let err = show (e :: IOException)
+                    Util.printInfo err (Config.interactive conf)
+                )
           Nothing -> return ()
   removeEmptyDirectories casDir
 
