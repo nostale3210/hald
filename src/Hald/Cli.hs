@@ -38,7 +38,7 @@ data GlobalOpts = GlobalOpts
     optCommand :: !Command
   }
 
-data CasCommand = CasGc
+data CasCommand = CasGc | CasFsverity
 
 data Command
   = Dep
@@ -205,8 +205,12 @@ diffOptions =
 
 casCommand :: Mod CommandFields Command
 casCommand =
-  command "cas" (info (Cas <$> hsubparser casGcCommand) (progDesc "CAS operations"))
+  command "cas" (info (Cas <$> hsubparser (casGcCommand <> casFsverityCommand)) (progDesc "CAS operations"))
 
 casGcCommand :: Mod CommandFields CasCommand
 casGcCommand =
   command "gc" (info (pure CasGc) (progDesc "Perform garbage collection on the CAS"))
+
+casFsverityCommand :: Mod CommandFields CasCommand
+casFsverityCommand =
+  command "fsverity" (info (pure CasFsverity) (progDesc "Enable fs-verity on all CAS objects"))

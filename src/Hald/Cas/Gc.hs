@@ -1,6 +1,7 @@
-module Hald.Cas.Gc (collectGarbage, restoreStoreFlags) where
+module Hald.Cas.Gc (collectGarbage, restoreStoreFlags, enableFsVerityOnCas) where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
+import Control.Exception (bracket_)
 import Control.Monad (unless, when)
 import Data.Set qualified as Set
 import Hald.Config qualified as Config
@@ -32,6 +33,20 @@ restoreStoreFlags conf = do
         oExists <- doesFileExist casObj
         when oExists $ Lock.setImmutable casObj
 
+enableFsVerityOnCas :: Config.Config -> IO ()
+enableFsVerityOnCas conf = do
+  let casDir = Config.haldPath conf </> "objects"
+  Util.walk (ParallelN 2) action casDir
+  where
+    action =
+      TreeAction
+        { dirAction = \_ _ -> pure (),
+          symAction = \_ _ -> pure (),
+          fileAction = \obj s ->
+            when (isRegularFile s) $
+              bracket_ (Lock.setMutable obj) (Lock.setImmutable obj) (Lock.enableFsVerity obj)
+        }
+
 collectGarbage :: Config.Config -> [Int] -> IO ()
 collectGarbage conf keptDepIds = do
   threads <- getNumCapabilities
@@ -49,9 +64,9 @@ collectGarbage conf keptDepIds = do
               { dirAction = \_ _ -> return (),
                 symAction = \_ _ -> return (),
                 fileAction = \_ s ->
-                  when (isRegularFile s) $
-                    atomically $
-                      modifyTVar' refSetVar (Set.insert (deviceID s, fileID s))
+                  when (isRegularFile s)
+                    $ atomically
+                    $ modifyTVar' refSetVar (Set.insert (deviceID s, fileID s))
               }
           )
           (root </> "usr")
@@ -83,9 +98,9 @@ removeEmptyDirectories = Util.walk (ParallelN 2) action
       TreeAction
         { dirAction = \d _ -> do
             contents <- listDirectory d
-            when (null contents) $
-              Util.ioOrPass $
-                removeDirectory d,
+            when (null contents)
+              $ Util.ioOrPass
+              $ removeDirectory d,
           symAction = \_ _ -> return (),
           fileAction = \_ _ -> return ()
         }
