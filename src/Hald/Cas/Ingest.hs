@@ -106,7 +106,9 @@ doHash srcPath rootDir subDir layerDiffs casDir = do
       Nothing -> Util.ioOrPass $ copyFileWithMetadata srcPath tmpPath
     renameResult <- Util.safeCall $ renameFile tmpPath destPath
     case renameResult of
-      Just _ -> Lock.setImmutable destPath
+      Just _ -> do
+        Lock.enableFsVerity destPath
+        Lock.setImmutable destPath
       Nothing -> removeFile tmpPath
   return (prefix </> hashStr)
 

@@ -4,14 +4,17 @@ module Hald.Lock where
 
 import Control.Exception (IOException, bracket, catch)
 import Control.Monad (unless, void, when)
+import Data.Word (Word64)
+import Foreign.C.Error (Errno (..), eEXIST, eNOSYS, eNOTTY, eOPNOTSUPP, getErrno)
 import Foreign.C.String (CString, withCString)
-import Foreign.C.Types (CInt (..), CLong (..), CULong (..))
-import Foreign.Marshal.Alloc (alloca)
+import Foreign.C.Types (CInt (..), CLong (..), CUInt (..), CULong (..))
+import Foreign.Marshal.Alloc (alloca, allocaBytes)
+import Foreign.Marshal.Utils (fillBytes)
 import Foreign.Ptr (Ptr)
-import Foreign.Storable (poke)
+import Foreign.Storable (poke, pokeByteOff)
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
-import System.Posix.Files (accessTimeHiRes, fileGroup, fileMode, fileOwner, getFileStatus, modificationTimeHiRes, setFileMode, setFileTimesHiRes, setOwnerAndGroup)
+import System.Posix.Files (accessTimeHiRes, fileGroup, fileMode, fileOwner, fileSize, getFileStatus, modificationTimeHiRes, setFileMode, setFileTimesHiRes, setOwnerAndGroup)
 import System.Process (readProcess)
 
 data ReadMode
@@ -53,12 +56,12 @@ roBindMountDirToSelf readMode dirPath =
   catch
     ( do
         mounted <- Util.isMountpoint dirPath
-        unless mounted $
-          void $
-            readProcess
-              "mount"
-              ["-o", "bind," <> show readMode, "--make-private", dirPath, dirPath]
-              ""
+        unless mounted
+          $ void
+          $ readProcess
+            "mount"
+            ["-o", "bind," <> show readMode, "--make-private", dirPath, dirPath]
+            ""
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -70,9 +73,9 @@ roRemountDir readMode dirPath =
   catch
     ( do
         mounted <- Util.isMountpoint dirPath
-        when mounted $
-          void $
-            readProcess "mount" ["-o", "remount," <> show readMode, dirPath] ""
+        when mounted
+          $ void
+          $ readProcess "mount" ["-o", "remount," <> show readMode, dirPath] ""
     )
     ( \e ->
         let err = show (e :: IOException)
@@ -82,10 +85,10 @@ roRemountDir readMode dirPath =
 umountDirForcibly :: RecursiveUmount -> FilePath -> IO ()
 umountDirForcibly opts dirPath = do
   mounted <- Util.isMountpoint dirPath
-  when mounted $
-    Util.ioOrPass $
-      void $
-        readProcess "umount" ["-" <> show opts, dirPath] ""
+  when mounted
+    $ Util.ioOrPass
+    $ void
+    $ readProcess "umount" ["-" <> show opts, dirPath] ""
 
 foreign import capi "linux/fs.h value FS_IOC_SETFLAGS"
   fsIocSetflags :: CULong
@@ -96,6 +99,12 @@ foreign import capi "linux/fs.h value FS_IMMUTABLE_FL"
 foreign import capi "fcntl.h open"
   c_open :: CString -> CInt -> IO CInt
 
+foreign import capi "unistd.h sysconf"
+  c_sysconf :: CInt -> IO CLong
+
+foreign import capi "unistd.h value _SC_PAGESIZE"
+  c_SC_PAGESIZE :: CInt
+
 foreign import capi "unistd.h close"
   c_close :: CInt -> IO CInt
 
@@ -104,6 +113,12 @@ foreign import capi "sys/ioctl.h ioctl"
 
 foreign import capi "sys/ioctl.h ioctl"
   c_ioctl_int :: CInt -> CULong -> CInt -> IO CInt
+
+foreign import capi "linux/fsverity.h value FS_IOC_ENABLE_VERITY"
+  fsIocEnableVerity :: CULong
+
+foreign import capi "sys/ioctl.h ioctl"
+  c_ioctl_ptr :: CInt -> CULong -> Ptr () -> IO CInt
 
 setFileFlag :: FilePath -> CInt -> IO ()
 setFileFlag path flag =
@@ -142,3 +157,34 @@ copyMetadata src dst = do
   Util.ioOrPass $ setOwnerAndGroup dst (fileOwner st) (fileGroup st)
   setFileMode dst (fileMode st)
   Util.ioOrPass $ setFileTimesHiRes dst (accessTimeHiRes st) (modificationTimeHiRes st)
+
+enableFsVerity :: FilePath -> IO ()
+enableFsVerity path =
+  Util.ioOrPass $
+    withCString path $ \cpath -> do
+      sz <- fileSize <$> getFileStatus path
+      when (sz > 0) $
+        bracket (c_open cpath 0) closeWhenOpen $ \fd ->
+          when (fd >= 0) $
+            allocaBytes fsverityArgSizeInt $ \arg -> do
+              fillBytes arg 0 fsverityArgSizeInt
+              pokeByteOff arg 0 verityVersion
+              pokeByteOff arg 4 verityHashAlgSha256
+              blockSize <- fromIntegral <$> c_sysconf c_SC_PAGESIZE
+              pokeByteOff arg 8 (blockSize :: CUInt)
+              pokeByteOff arg 16 (0 :: Word64)
+              pokeByteOff arg 32 (0 :: Word64)
+              r <- c_ioctl_ptr fd fsIocEnableVerity arg
+              when (r < 0) $ do
+                e <- getErrno
+                unless (e `elem` silentErrnos) $
+                  Util.printInfo ("fsverity enable failed on " <> path <> "; errno " <> show (errnoCode e)) False
+  where
+    fsverityArgSizeInt = 128 :: Int
+    verityVersion = 1 :: CUInt
+    verityHashAlgSha256 = 1 :: CUInt
+    silentErrnos = [eEXIST, eNOSYS, eNOTTY, eOPNOTSUPP]
+    errnoCode (Errno n) = fromIntegral n
+    closeWhenOpen fd
+      | fd >= 0 = void $ c_close fd
+      | otherwise = pure ()
