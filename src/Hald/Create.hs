@@ -2,7 +2,7 @@ module Hald.Create where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Exception (IOException, catch)
-import Control.Monad (void, when)
+import Control.Monad (filterM, void, when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Hald.Cas.Ingest qualified as CAS
@@ -12,7 +12,7 @@ import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
-import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, findExecutable, getSymbolicLinkTarget, removeFile)
+import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, doesFileExist, findExecutable, getSymbolicLinkTarget, removeFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Posix (fileMode, modificationTime, setFileMode, setFileTimesHiRes, setSymbolicLinkTimesHiRes)
@@ -35,9 +35,9 @@ createBootEntry depId conf = do
   if bootTemplateExists
     then do
       templateContent <-
-        Util.ioOrDie "Reading boot entry template" $
-          readFile $
-            Config.configPath conf <> "/boot.conf"
+        Util.ioOrDie "Reading boot entry template"
+          $ readFile
+          $ Config.configPath conf <> "/boot.conf"
       Util.ioOrDie "Creating boot entry" $
         writeFile
           (Config.bootPath conf <> "/loader/entries/" <> show depId <> ".conf")
@@ -69,8 +69,7 @@ removeTmpFile file =
   Util.pathExists file >>= \fileExists ->
     when fileExists $
       catch
-        ( removeFile file
-        )
+        (removeFile file)
         ( \e ->
             let err = show (e :: IOException)
              in Util.printInfo ("Couldn't remove temporary files; " <> err) False
@@ -85,9 +84,9 @@ mergeFiles :: FilePath -> FilePath -> FilePath -> IO ()
 mergeFiles inputA inputB outputFile = do
   contentA <- Util.ioOrDie "Reading merge file A" $ readFile inputA
   contentB <- Util.ioOrDie "Reading merge file B" $ readFile inputB
-  Util.ioOrDie "Writing merged file" $
-    writeFile outputFile $
-      mergeFileContents contentA contentB
+  Util.ioOrDie "Writing merged file"
+    $ writeFile outputFile
+    $ mergeFileContents contentA contentB
 
 syncMinimumState :: FilePath -> IO ()
 syncMinimumState =
@@ -120,13 +119,13 @@ collectFiles root = do
     ( TreeAction
         { dirAction = \_ _ -> return (),
           symAction = \p s ->
-            when (modificationTime s /= 0) $
-              atomically $
-                modifyTVar' ref (p :),
+            when (modificationTime s /= 0)
+              $ atomically
+              $ modifyTVar' ref (p :),
           fileAction = \p s ->
-            when (modificationTime s /= 0) $
-              atomically $
-                modifyTVar' ref (p :)
+            when (modificationTime s /= 0)
+              $ atomically
+              $ modifyTVar' ref (p :)
         }
     )
     root
@@ -254,17 +253,26 @@ writeLockfile conf dep = do
   Util.ioOrDie "Writing lockfile" $ writeFile (Legacy.treeLockfile conf depId) ""
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
-modulePathSearch conf deployment target =
-  Util.recursiveFileSearch
-    (Legacy.treeRootDir conf (Dep.identifier deployment) <> "/usr/lib/modules")
-    target
-    >>= maybe
-      ( Util.fatalWith
-          ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment))
-          ""
-      )
-      return
-      . listToMaybe
+modulePathSearch conf deployment target = do
+  let modulesDir = Legacy.treeRootDir conf (Dep.identifier deployment) <> "/usr/lib/modules"
+  fast <- shallowModulePath modulesDir target
+  case fast of
+    Just p -> return p
+    Nothing ->
+      Util.recursiveFileSearch modulesDir target
+        >>= maybe
+          ( Util.fatalWith
+              ("No " <> target <> " found in deployment " <> show (Dep.identifier deployment))
+              ""
+          )
+          return
+          . listToMaybe
+
+shallowModulePath :: FilePath -> FilePath -> IO (Maybe FilePath)
+shallowModulePath modulesDir target = do
+  entries <- Util.listDirSafe modulesDir
+  hits <- filterM (\e -> doesFileExist (modulesDir </> e </> target)) entries
+  return $ fmap (\e -> modulesDir </> e </> target) (listToMaybe hits)
 
 placeBootFiles :: Config.Config -> Dep.Deployment -> IO ()
 placeBootFiles conf deployment = do
@@ -286,9 +294,9 @@ installUki conf deployment = do
       (modulePathSearch conf deployment "vmlinuz")
       (modulePathSearch conf deployment "initramfs.img")
   templCmdline <-
-    Util.ioOrDie "Reading UKI cmdline" $
-      readFile $
-        Config.configPath conf <> "/cmdline"
+    Util.ioOrDie "Reading UKI cmdline"
+      $ readFile
+      $ Config.configPath conf <> "/cmdline"
   let cmdline =
         Util.removeString "\n" $
           Util.replaceString
@@ -299,17 +307,17 @@ installUki conf deployment = do
   let bootComps = Dep.bootComponents deployment
   case Dep.ukiPath bootComps of
     Just x ->
-      Util.ioOrDie "Building UKI" $
-        void $
-          Util.quietReadProcess
-            "ukify"
-            [ "build",
-              "--linux=" <> kernel,
-              "--initrd=" <> initrd,
-              "--cmdline=" <> cmdline,
-              "--output=" <> x
-            ]
-            ""
+      Util.ioOrDie "Building UKI"
+        $ void
+        $ Util.quietReadProcess
+          "ukify"
+          [ "build",
+            "--linux=" <> kernel,
+            "--initrd=" <> initrd,
+            "--cmdline=" <> cmdline,
+            "--output=" <> x
+          ]
+          ""
     Nothing -> Util.fatal $ "No UKI path supplied for deployment " <> show (Dep.identifier deployment)
 
 getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
