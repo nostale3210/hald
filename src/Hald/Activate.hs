@@ -37,31 +37,31 @@ ensureOverlayEmptyDir hp = do
 
 usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
 usrOverlayMount hp fromPath toPath =
-  Util.ioOrDie "Mounting overlay usr" $
-    void $
-      readProcess
-        "mount"
-        [ "-t",
-          "overlay",
-          "usr-root",
-          "--make-private",
-          "-o",
-          "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
-          toPath
-        ]
-        ""
+  Util.ioOrDie "Mounting overlay usr"
+    $ void
+    $ readProcess
+      "mount"
+      [ "-t",
+        "overlay",
+        "usr-root",
+        "--make-private",
+        "-o",
+        "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
+        toPath
+      ]
+      ""
 
 privateMount :: FilePath -> IO ()
 privateMount path =
-  Util.ioOrDie "Making mount private" $
-    void $
-      readProcess "mount" ["--make-private", path] ""
+  Util.ioOrDie "Making mount private"
+    $ void
+    $ readProcess "mount" ["--make-private", path] ""
 
 bindMount :: FilePath -> FilePath -> IO ()
 bindMount fromPath toPath =
-  Util.ioOrDie "Binding mount" $
-    void $
-      readProcess "mount" ["-o", "bind", "--make-private", fromPath, toPath] ""
+  Util.ioOrDie "Binding mount"
+    $ void
+    $ readProcess "mount" ["-o", "bind", "--make-private", fromPath, toPath] ""
 
 prepareMounts :: FilePath -> FilePath -> FilePath -> Bool -> Bool -> IO ()
 prepareMounts root hp newRoot usrMounted etcMounted = do

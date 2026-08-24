@@ -123,16 +123,16 @@ recursiveFileSearch rootDir fileName = do
 
 relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
 relabelSeLinuxPath rootPath contexts bp = do
-  ioOrDie "Relabeling boot directory" $
-    void $
-      quietReadProcess "restorecon" ["-RF", bp] ""
+  ioOrDie "Relabeling boot directory"
+    $ void
+    $ quietReadProcess "restorecon" ["-RF", bp] ""
   ioOrDie "Relabeling root directory" $ do
     createSymlink "usr/lib" (rootPath <> "/lib")
     createSymlink "usr/lib64" (rootPath <> "/lib64")
     threads <- getNumCapabilities
-    ioOrPass $
-      void $
-        quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
+    ioOrPass
+      $ void
+      $ quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
 
 getUserId :: IO Int
 getUserId = fromIntegral <$> getRealUserID
