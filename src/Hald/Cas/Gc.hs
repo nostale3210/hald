@@ -12,7 +12,7 @@ import Hald.Util qualified as Util
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, removeDirectory, removeFile)
 import System.FilePath ((</>))
 import System.Posix.Files (deviceID, fileID, isRegularFile)
-import UnliftIO.Async (pooledForConcurrentlyN_, pooledForConcurrently_)
+import UnliftIO.Async (pooledForConcurrently, pooledForConcurrentlyN_)
 import UnliftIO.Concurrent (getNumCapabilities)
 
 restoreStoreFlags :: Config.Config -> IO ()
@@ -53,25 +53,15 @@ collectGarbage conf keptDepIds = do
   let hp = Config.haldPath conf
       casDir = hp </> "objects"
       workThreads = max 1 $ div threads 2
-  refSetVar <- newTVarIO Set.empty
-  pooledForConcurrently_ keptDepIds $ \depId -> do
+  refSets <- pooledForConcurrently keptDepIds $ \depId -> do
     mRoot <- Legacy.resolveRootDir conf depId
     case mRoot of
-      Just root ->
-        Util.walk
-          (ParallelN 2)
-          ( TreeAction
-              { dirAction = \_ _ -> return (),
-                symAction = \_ _ -> return (),
-                fileAction = \_ s ->
-                  when (isRegularFile s)
-                    $ atomically
-                    $ modifyTVar' refSetVar (Set.insert (deviceID s, fileID s))
-              }
-          )
-          (root </> "usr")
-      Nothing -> return ()
-  refSet <- readTVarIO refSetVar
+      Just root -> do
+        localSetVar <- newTVarIO Set.empty
+        Util.walk (ParallelN 2) (refAction localSetVar) (root </> "usr")
+        readTVarIO localSetVar
+      Nothing -> return Set.empty
+  let refSet = Set.unions refSets
 
   dirExists <- doesDirectoryExist casDir
   when dirExists $ do
@@ -96,6 +86,16 @@ collectGarbage conf keptDepIds = do
                 )
           Nothing -> return ()
   removeEmptyDirectories casDir
+  where
+    refAction var =
+      TreeAction
+        { dirAction = \_ _ -> return (),
+          symAction = \_ _ -> return (),
+          fileAction = \_ s ->
+            when (isRegularFile s)
+              $ atomically
+              $ modifyTVar' var (Set.insert (deviceID s, fileID s))
+        }
 
 removeEmptyDirectories :: FilePath -> IO ()
 removeEmptyDirectories = Util.walk (ParallelN 2) action
