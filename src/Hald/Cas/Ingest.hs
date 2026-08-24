@@ -20,13 +20,14 @@ import Hald.Util qualified as Util
 import System.Directory (copyFileWithMetadata, createDirectoryIfMissing, doesFileExist, doesPathExist, listDirectory, removeFile, renameFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openTempFile, withFile)
-import System.Posix.Files (createLink, createSymbolicLink, fileSize, getSymbolicLinkStatus, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
+import System.Posix.Files (createLink, createSymbolicLink, fileSize, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
 
 data TreeEntry
   = TreeDir
   | TreeSymlink !B8.ByteString
   | TreeFile !B8.ByteString
+  | TreeEmpty
 
 type AssetMap = HashMap.HashMap FilePath TreeEntry
 
@@ -50,15 +51,22 @@ walkDirectory h rootDir currentDir casDir subDir layerDiffs = do
       (dirs3, rest1) = partition (\(_, _, s) -> isDirectory s) valid
       (files3, rest2) = partition (\(_, _, s) -> isRegularFile s) rest1
       (syms3, special3) = partition (\(_, _, s) -> isSymbolicLink s) rest2
+      isEmpty (_, _, s) = fileSize s == 0
+      (emptyFiles3, realFiles3) = partition isEmpty files3
+      (emptySpecial3, realSpecial3) = partition isEmpty special3
       dropStatus = map (\(fp, rp, _) -> (fp, rp))
+      relOf (_, rp, _) = rp
       dirs = dropStatus dirs3
-      files = dropStatus files3
+      files = dropStatus realFiles3
       syms = dropStatus syms3
-      special = dropStatus special3
+      special = dropStatus realSpecial3
 
   forM_ dirs $ \(fullPath, relPath) -> do
     hPutStrLn h $ "D\t" <> relPath
     walkDirectory h rootDir fullPath casDir subDir layerDiffs
+
+  forM_ (map relOf emptyFiles3 ++ map relOf emptySpecial3) $ \relPath ->
+    hPutStrLn h $ "E\t" <> relPath
 
   hashedFiles <-
     pooledMapConcurrently
@@ -127,6 +135,7 @@ parseLines = map parseEntry . B8.lines
 parseEntry :: B8.ByteString -> (B8.ByteString, TreeEntry)
 parseEntry line = case B8.split '\t' line of
   [d, p] | d == B8.singleton 'D' -> (p, TreeDir)
+  [e, p] | e == B8.singleton 'E' -> (p, TreeEmpty)
   [s, p, t] | s == B8.singleton 'S' -> (p, TreeSymlink t)
   [f, p, c] | f == B8.singleton 'F' -> (p, TreeFile c)
   _ -> error $ "Invalid AssetMap entry: " <> B8.unpack line
@@ -159,7 +168,10 @@ deployEntry casDir targetRoot emptyFile (relPath, entry) = case entry of
     targetExists <- doesFileExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
-      stat <- getSymbolicLinkStatus casPath
-      if fileSize stat == 0
-        then createLink emptyFile targetPath
-        else createLink casPath targetPath
+      createLink casPath targetPath
+  TreeEmpty -> do
+    let targetPath = targetRoot </> B8.unpack relPath
+    targetExists <- doesFileExist targetPath
+    unless targetExists $ do
+      createDirectoryIfMissing True (takeDirectory targetPath)
+      createLink emptyFile targetPath
