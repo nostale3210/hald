@@ -88,13 +88,13 @@ findDeploymentIds conf = do
   where
     extractIds paths =
       let dirSet =
-            Set.fromList $
-              mapMaybe (parseId . filter (`notElem` ['.', '/'])) $
-                filter Util.startsWithDigit paths
+            Set.fromList
+              $ mapMaybe (parseId . filter (`notElem` ['.', '/']))
+              $ filter Util.startsWithDigit paths
           lfSet =
-            Set.fromList $
-              mapMaybe (parseId . filter (`notElem` ['.', '/'])) $
-                filter Util.startsWithDotDigit paths
+            Set.fromList
+              $ mapMaybe (parseId . filter (`notElem` ['.', '/']))
+              $ filter Util.startsWithDotDigit paths
        in Set.union dirSet lfSet
     parseId s = fmap fst (listToMaybe . reads $ s)
 
