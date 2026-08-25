@@ -48,7 +48,7 @@ dummyDeployment :: Deployment
 dummyDeployment =
   Deployment
     { identifier = -1,
-      backend = Hardlink,
+      backend = Cas,
       lockfile = Nothing,
       rootDir = Nothing,
       bootComponents =

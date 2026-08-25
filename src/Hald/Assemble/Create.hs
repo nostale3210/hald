@@ -18,13 +18,13 @@ import System.FilePath ((</>))
 import System.Mem (performGC)
 import System.Posix.Signals (sigINT, sigTERM)
 
-deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> Bool -> Bool -> IO ()
-deploymentCreationAssemblyPre act build keep gc up se conf inhibit sb uki cas = do
+deploymentCreationAssemblyPre :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Bool -> Bool -> Bool -> Bool -> Bool -> IO ()
+deploymentCreationAssemblyPre act build keep gc up se conf inhibit sb uki cas hardlink = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
-  deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas
+  deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas hardlink
 
-deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> Bool -> Bool -> Bool -> IO ()
-deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
+deploymentCreationAssembly :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Config.Config -> Util.MessageContainer -> Bool -> Bool -> Bool -> Bool -> IO ()
+deploymentCreationAssembly act build keep gc up se conf msgCont sb uki _cas hardlink = do
   updated <-
     if up
       then do
@@ -33,7 +33,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
       else return True
 
   existingDeps <- Dep.getDeploymentsInt conf
-  let backend = if cas then Dep.Cas else Dep.Hardlink
+  let backend = if hardlink then Dep.Hardlink else Dep.Cas
       newDep = Dep.createDeployment existingDeps conf backend
 
   Fail.installAsyncHandler [sigINT, sigTERM]
@@ -88,14 +88,14 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
 
       when se $ do
         Util.printProgress msgCont ("Relabeling deployment " <> show (Dep.identifier newDep) <> "...")
-        when cas
+        when (backend == Dep.Cas)
           $ Lock.clearRecursiveImmutable
           $ Dep.rootDirFor pbConf (Dep.identifier newDep) </> "usr"
         Util.relabelSeLinuxPath
           (Dep.rootDirFor pbConf (Dep.identifier newDep))
           "/etc/selinux/targeted/contexts/files/file_contexts"
           (Config.bootPath pbConf)
-        when cas $ do
+        when (backend == Dep.Cas) $ do
           Lock.setImmutable $ Dep.rootDirFor pbConf (Dep.identifier newDep) </> "empty"
           Lock.setImmutable $ Dep.rootDirFor pbConf (Dep.identifier newDep) </> "usr/.hald_dep"
 

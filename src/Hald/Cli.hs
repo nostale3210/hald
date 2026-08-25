@@ -50,7 +50,8 @@ data Command
         stateFlag :: Bool,
         secureBoot :: Bool,
         uki :: Bool,
-        casFlag :: Bool
+        casFlag :: Bool,
+        hardlinkFlag :: Bool
       }
   | Activate Int
   | Status Bool
@@ -155,7 +156,14 @@ depOptions =
       True
       ( long "cas"
           <> short 'c'
-          <> help "Use content-addressable store (CAS) backend"
+          <> help "Use content-addressable store (CAS) backend (no-op)"
+      )
+    <*> flag
+      False
+      True
+      ( long "hardlink"
+          <> short 'H'
+          <> help "Use rsync hardlink backend"
       )
 
 rmCommand :: Mod CommandFields Command

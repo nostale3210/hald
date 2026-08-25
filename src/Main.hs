@@ -26,7 +26,7 @@ assembleAction parser = do
       conf0 = Config.applyUserConfig config' userConf
   Util.setSystemThreads (Config.maxThreads conf0)
   case Cli.optCommand parser of
-    Cli.Dep a b c d e f g h i -> Ascr.deploymentCreationAssemblyPre a b c d e f conf0 inhibit g h i
+    Cli.Dep a b c d e f g h i j -> Ascr.deploymentCreationAssemblyPre a b c d e f conf0 inhibit g h i j
     Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf0 inhibit
     Cli.Gc -> Asgc.deploymentGcAssemblyPre conf0 inhibit
     Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf0 inhibit
