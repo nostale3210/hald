@@ -1,18 +1,20 @@
 module Hald.Cas.Gc (collectGarbage, restoreStoreFlags, enableFsVerityOnCas) where
 
-import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
 import Control.Exception (IOException, bracket_, catch)
-import Control.Monad (unless, when)
-import Data.Set qualified as Set
+import Control.Monad (filterM, when)
+import Data.ByteString.Char8 qualified as B8
+import Data.HashSet qualified as HashSet
+import Hald.Cas.AssetMap qualified as AssetMap
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
+import Hald.Space qualified as Space
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, removeDirectory, removeFile)
 import System.FilePath ((</>))
-import System.Posix.Files (deviceID, fileID, isRegularFile)
-import UnliftIO.Async (pooledForConcurrently, pooledForConcurrentlyN_)
+import System.Posix.Files (isRegularFile)
+import UnliftIO.Async (pooledForConcurrently, pooledForConcurrentlyN_, pooledForConcurrently_)
 import UnliftIO.Concurrent (getNumCapabilities)
 
 restoreStoreFlags :: Config.Config -> IO ()
@@ -49,20 +51,45 @@ enableFsVerityOnCas conf = do
 
 collectGarbage :: Config.Config -> [Int] -> IO ()
 collectGarbage conf keptDepIds = do
-  threads <- getNumCapabilities
-  let hp = Config.haldPath conf
-      casDir = hp </> "objects"
-      workThreads = max 1 $ div threads 2
-  refSets <- pooledForConcurrently keptDepIds $ \depId -> do
+  refSets <- pooledForConcurrently keptDepIds $ \depId ->
+    (,) depId <$> depReferences conf depId
+  let referenced = HashSet.unions [refs | (_, Just refs) <- refSets]
+      brokenDepIds = [depId | (depId, Nothing) <- refSets]
+  pooledForConcurrently_ brokenDepIds $ \depId -> do
     dep <- Dep.getDeployment depId conf
-    case Dep.rootDir dep of
-      Just root -> do
-        localSetVar <- newTVarIO Set.empty
-        Util.walk (ParallelN 2) (refAction localSetVar) (root </> "usr")
-        readTVarIO localSetVar
-      Nothing -> return Set.empty
-  let refSet = Set.unions refSets
+    Space.rmDep dep conf
+  survivors <- filterM (stillPresent conf) brokenDepIds
+  if null survivors
+    then deleteUnreferencedObjects conf referenced
+    else
+      Util.printInfo
+        ("Removing broken CAS deployments failed for:" <> show survivors <> " (GC skipped)")
+        (Config.interactive conf)
 
+depReferences :: Config.Config -> Int -> IO (Maybe (HashSet.HashSet B8.ByteString))
+depReferences conf depId = do
+  dep <- Dep.getDeployment depId conf
+  case Dep.backend dep of
+    Dep.Hardlink -> return (Just HashSet.empty)
+    Dep.Cas -> maybe (return Nothing) referencesFromRoot (Dep.rootDir dep)
+  where
+    referencesFromRoot root = do
+      hasAssetMap <- Util.pathExists (root </> "assetmap")
+      if not hasAssetMap
+        then return Nothing
+        else do
+          mAssetMap <- AssetMap.loadAssetMap (root </> "assetmap")
+          return (AssetMap.referencedObjects <$> mAssetMap)
+
+stillPresent :: Config.Config -> Int -> IO Bool
+stillPresent conf depId =
+  maybe False (const True) . Dep.rootDir <$> Dep.getDeployment depId conf
+
+deleteUnreferencedObjects :: Config.Config -> HashSet.HashSet B8.ByteString -> IO ()
+deleteUnreferencedObjects conf referenced = do
+  threads <- getNumCapabilities
+  let casDir = Config.haldPath conf </> "objects"
+      workThreads = max 1 $ div threads 2
   dirExists <- doesDirectoryExist casDir
   when dirExists $ do
     prefixes <- listDirectory casDir
@@ -72,30 +99,12 @@ collectGarbage conf keptDepIds = do
       objects <- listDirectory casPath
       pooledForConcurrentlyN_ workThreads objects $ \o -> do
         let casObj = casPath </> o
-        mStat <- Util.tryStat casObj
-        case mStat of
-          Just stat -> do
-            let ino = (deviceID stat, fileID stat)
-            unless (ino `Set.member` refSet) $ do
-              Lock.setMutable casObj
-              catch
-                (removeFile casObj)
-                ( \e -> do
-                    let err = show (e :: IOException)
-                    Util.printInfo err (Config.interactive conf)
-                )
-          Nothing -> return ()
-  removeEmptyDirectories casDir
-  where
-    refAction var =
-      TreeAction
-        { dirAction = \_ _ -> return (),
-          symAction = \_ _ -> return (),
-          fileAction = \_ s ->
-            when (isRegularFile s)
-              $ atomically
-              $ modifyTVar' var (Set.insert (deviceID s, fileID s))
-        }
+        when (not (HashSet.member (B8.pack (p </> o)) referenced)) $ do
+          Lock.setMutable casObj
+          catch
+            (removeFile casObj)
+            (\e -> Util.printInfo (show (e :: IOException)) (Config.interactive conf))
+    removeEmptyDirectories casDir
 
 removeEmptyDirectories :: FilePath -> IO ()
 removeEmptyDirectories = Util.walk (ParallelN 2) action

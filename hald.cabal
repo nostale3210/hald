@@ -29,6 +29,7 @@ executable hald
     Hald.Assemble.Create
     Hald.Assemble.Gc
     Hald.Assemble.Remove
+    Hald.Cas.AssetMap
     Hald.Cas.Gc
     Hald.Cas.Hash
     Hald.Cas.Ingest

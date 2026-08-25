@@ -1,18 +1,16 @@
 module Hald.Cas.Ingest
-  ( TreeEntry (..),
-    AssetMap,
-    ingestTree,
+  ( ingestTree,
     deployTreeFromFile,
-    loadAssetMap,
   )
 where
 
 import Control.Monad (forM, forM_, unless)
-import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as B8
 import Data.HashMap.Strict qualified as HashMap
 import Data.List (partition)
 import Data.Maybe (mapMaybe)
+import Hald.Cas.AssetMap (TreeEntry (..))
+import Hald.Cas.AssetMap qualified as AssetMap
 import Hald.Cas.Hash qualified as Hash
 import Hald.Container (findInLayers)
 import Hald.Lock qualified as Lock
@@ -22,14 +20,6 @@ import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (Handle, IOMode (WriteMode), hClose, hPutStrLn, openTempFile, withFile)
 import System.Posix.Files (createLink, createSymbolicLink, fileSize, isDirectory, isRegularFile, isSymbolicLink, readSymbolicLink)
 import UnliftIO.Async (pooledMapConcurrently, pooledMapConcurrently_)
-
-data TreeEntry
-  = TreeDir
-  | TreeSymlink !B8.ByteString
-  | TreeFile !B8.ByteString
-  | TreeEmpty
-
-type AssetMap = HashMap.HashMap FilePath TreeEntry
 
 ingestTree :: FilePath -> FilePath -> FilePath -> FilePath -> [FilePath] -> IO ()
 ingestTree containerRoot subDir casDir outputPath layerDiffs =
@@ -121,56 +111,43 @@ doHash srcPath rootDir subDir layerDiffs casDir = do
   return (prefix </> hashStr)
 
 deployTreeFromFile :: FilePath -> FilePath -> FilePath -> FilePath -> IO ()
-deployTreeFromFile casDir targetRoot emptyFile assetMapFile = do
-  content <- BS.readFile assetMapFile
-  let entries = parseLines content
-  pooledMapConcurrently_ (setMutableIfFile casDir) entries
-  createDirectoryIfMissing True targetRoot
-  pooledMapConcurrently_ (deployEntry casDir targetRoot emptyFile) entries
-  pooledMapConcurrently_ (setImmutableIfFile casDir) entries
+deployTreeFromFile casDir targetRoot emptyFile assetMapPath = do
+  mAssetMap <- AssetMap.loadAssetMap assetMapPath
+  case mAssetMap of
+    Nothing -> Util.fatal ("Invalid entry in assetmap " <> assetMapPath)
+    Just assetMap -> do
+      let entries = [(B8.unpack p, e) | (p, e) <- HashMap.toList assetMap]
+      pooledMapConcurrently_ (setMutableIfFile casDir) entries
+      createDirectoryIfMissing True targetRoot
+      pooledMapConcurrently_ (deployEntry casDir targetRoot emptyFile) entries
+      pooledMapConcurrently_ (setImmutableIfFile casDir) entries
 
-parseLines :: BS.ByteString -> [(B8.ByteString, TreeEntry)]
-parseLines = map parseEntry . B8.lines
-
-parseEntry :: B8.ByteString -> (B8.ByteString, TreeEntry)
-parseEntry line = case B8.split '\t' line of
-  [d, p] | d == B8.singleton 'D' -> (p, TreeDir)
-  [e, p] | e == B8.singleton 'E' -> (p, TreeEmpty)
-  [s, p, t] | s == B8.singleton 'S' -> (p, TreeSymlink t)
-  [f, p, c] | f == B8.singleton 'F' -> (p, TreeFile c)
-  _ -> error $ "Invalid AssetMap entry: " <> B8.unpack line
-
-setMutableIfFile :: FilePath -> (B8.ByteString, TreeEntry) -> IO ()
+setMutableIfFile :: FilePath -> (FilePath, TreeEntry) -> IO ()
 setMutableIfFile casDir (_, TreeFile p) = Lock.setMutable (casDir </> B8.unpack p)
 setMutableIfFile _ _ = return ()
 
-setImmutableIfFile :: FilePath -> (B8.ByteString, TreeEntry) -> IO ()
+setImmutableIfFile :: FilePath -> (FilePath, TreeEntry) -> IO ()
 setImmutableIfFile casDir (_, TreeFile p) = Lock.setImmutable (casDir </> B8.unpack p)
 setImmutableIfFile _ _ = return ()
 
-loadAssetMap :: FilePath -> IO AssetMap
-loadAssetMap path =
-  (\content -> HashMap.fromList [(B8.unpack p, e) | (p, e) <- parseLines content])
-    <$> BS.readFile path
-
-deployEntry :: FilePath -> FilePath -> FilePath -> (B8.ByteString, TreeEntry) -> IO ()
+deployEntry :: FilePath -> FilePath -> FilePath -> (FilePath, TreeEntry) -> IO ()
 deployEntry casDir targetRoot emptyFile (relPath, entry) = case entry of
-  TreeDir -> createDirectoryIfMissing True (targetRoot </> B8.unpack relPath)
+  TreeDir -> createDirectoryIfMissing True (targetRoot </> relPath)
   TreeSymlink target -> do
-    let targetPath = targetRoot </> B8.unpack relPath
+    let targetPath = targetRoot </> relPath
     targetExists <- doesPathExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
       createSymbolicLink (B8.unpack target) targetPath
   TreeFile casRelPath -> do
     let casPath = casDir </> B8.unpack casRelPath
-        targetPath = targetRoot </> B8.unpack relPath
+        targetPath = targetRoot </> relPath
     targetExists <- doesFileExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
       createLink casPath targetPath
   TreeEmpty -> do
-    let targetPath = targetRoot </> B8.unpack relPath
+    let targetPath = targetRoot </> relPath
     targetExists <- doesFileExist targetPath
     unless targetExists $ do
       createDirectoryIfMissing True (takeDirectory targetPath)
