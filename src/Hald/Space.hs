@@ -6,7 +6,6 @@ import Data.List (sort)
 import Data.Maybe (fromMaybe, isJust)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
-import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Util qualified as Util
 import System.Directory (removePathForcibly)
@@ -85,7 +84,7 @@ checkDep depId conf = do
   lockfileExists <- componentPresent $ Dep.lockfile dep
   idFileExists <- case Dep.rootDir dep of
     Just r -> do
-      mMarker <- Legacy.readDepLockfile r
+      mMarker <- Dep.readDepLockfile r
       case mMarker of
         Just _ -> return True
         Nothing -> return False
@@ -96,7 +95,7 @@ checkDep depId conf = do
     && idFileExists
     then case Dep.rootDir dep of
       Just r -> do
-        mSavedId <- Legacy.readDepLockfile r
+        mSavedId <- Dep.readDepLockfile r
         case mSavedId of
           Just savedId
             | savedId /= depId -> do

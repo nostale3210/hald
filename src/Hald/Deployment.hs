@@ -3,7 +3,6 @@ module Hald.Deployment where
 import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Hald.Config qualified as Config
-import Hald.Legacy qualified as Legacy
 import Hald.Util qualified as Util
 import System.Directory (doesDirectoryExist)
 import System.FilePath ((</>))
@@ -28,14 +27,20 @@ data BootComponents
   }
   deriving (Show, Eq)
 
+rootDirFor :: Config.Config -> Int -> FilePath
+rootDirFor conf depId = Config.haldPath conf </> "trees" </> show depId
+
+lockfileFor :: Config.Config -> Int -> FilePath
+lockfileFor conf depId = Config.haldPath conf </> "trees/." <> show depId
+
 createDeployment :: [Int] -> Config.Config -> Backend -> Deployment
 createDeployment exDeps conf backend =
   let depId = Util.newIdentifier exDeps
    in Deployment
         { identifier = depId,
           backend = backend,
-          lockfile = Just (Legacy.treeLockfile conf depId),
-          rootDir = Just (Legacy.treeRootDir conf depId),
+          lockfile = Just (lockfileFor conf depId),
+          rootDir = Just (rootDirFor conf depId),
           bootComponents = createBootPaths depId conf
         }
 
@@ -99,19 +104,12 @@ getBootComponents depId conf = do
 
 getDeployment :: Int -> Config.Config -> IO Deployment
 getDeployment depId conf = do
-  lFile <- Legacy.resolveLockfile conf depId
-  rDir <- Legacy.resolveRootDir conf depId
-  let markerFile = case rDir of
-        Just d -> d <> "/backend"
-        Nothing -> Legacy.treeRootDir conf depId <> "/backend"
-  rDirExists <- case rDir of
-    Just d -> Util.pathExists d
-    Nothing -> return False
+  let rDir = rootDirFor conf depId
+      markerFile = rDir </> "backend"
+  rDirExists <- Util.pathExists rDir
   rDirIsDir <-
     if rDirExists
-      then case rDir of
-        Just d -> doesDirectoryExist d
-        Nothing -> return False
+      then doesDirectoryExist rDir
       else return False
   markerExists <- Util.pathExists markerFile
   backend <-
@@ -127,38 +125,51 @@ getDeployment depId conf = do
     Deployment
       { identifier = depId,
         backend = backend,
-        lockfile = lFile,
-        rootDir = if rDirExists && rDirIsDir then rDir else Nothing,
+        lockfile = Just (lockfileFor conf depId),
+        rootDir = if rDirExists && rDirIsDir then Just rDir else Nothing,
         bootComponents = bComponents
       }
 
-isNumericConf :: String -> Bool
-isNumericConf f =
-  not (null f)
-    && head f `elem` ['0' .. '9']
-    && let l = length f in l >= 6 && drop (l - 5) f == ".conf"
+parseIntStrict :: String -> Maybe Int
+parseIntStrict s = case reads s of
+  [(n, "")] -> Just n
+  _ -> Nothing
 
-getDeployments :: Config.Config -> IO [FilePath]
-getDeployments conf = do
+getDeploymentsInt :: Config.Config -> IO [Int]
+getDeploymentsInt conf = do
   let bp = Config.bootPath conf
       ep = bp <> "/loader/entries"
       up = Config.ukiPath conf
-  depIds <- Legacy.findDeploymentIds conf
+  treeDeps <- findDeploymentIds conf
   bdEntries <- Util.listDirSafe bp
   beEntries <- Util.listDirSafe ep
   ukiEntries <- Util.listDirSafe up
-  let bootDirs = map (bp </>) $ filter Util.startsWithDigit bdEntries
-      bootEntrys = map (ep </>) $ filter isNumericConf beEntries
-      ukis = map (up </>) $ filter Util.startsWithDotDigit ukiEntries
-      bootDSet = Set.fromList $ map (Util.removeString (bp <> "/")) bootDirs
-      bootESet = Set.fromList $ map (Util.removeString ".conf" . Util.removeString (ep <> "/")) bootEntrys
-      ukiSet = Set.fromList $ map (Util.removeString ".efi" . Util.removeString (up <> "/")) ukis
-  return $ Set.toList $ Set.union ukiSet $ Set.union bootESet . Set.union bootDSet $ Set.fromList (map show depIds)
-
-getDeploymentsInt :: Config.Config -> IO [Int]
-getDeploymentsInt = fmap (mapMaybe parseId) . getDeployments
+  let bootIds =
+        mapMaybe parseIntStrict bdEntries
+          <> mapMaybe (stripExt ".conf") beEntries
+          <> mapMaybe (stripExt ".efi") ukiEntries
+  return $ Set.toList $ Set.fromList (treeDeps <> bootIds)
   where
-    parseId s = fmap fst (listToMaybe (reads s))
+    stripExt ext = parseIntStrict . Util.removeString ext
 
 getCurrentDeploymentId :: FilePath -> IO Int
-getCurrentDeploymentId root = Data.Maybe.fromMaybe 0 <$> Legacy.readDepLockfile root
+getCurrentDeploymentId root = Data.Maybe.fromMaybe 0 <$> readDepLockfile root
+
+findDeploymentIds :: Config.Config -> IO [Int]
+findDeploymentIds conf =
+  mapMaybe treeEntryId <$> Util.listDirSafe (Config.haldPath conf </> "trees")
+  where
+    treeEntryId = parseIntStrict . Util.removeString "."
+
+readDepLockfile :: FilePath -> IO (Maybe Int)
+readDepLockfile root = do
+  markerExists <- Util.pathExists markerPath
+  if markerExists
+    then Just . parseDepId <$> readFile markerPath
+    else return Nothing
+  where
+    markerPath = root </> "usr/.hald_dep"
+    parseDepId content =
+      case lines content of
+        (l : _) -> maybe 0 fst $ listToMaybe $ reads l
+        [] -> 0

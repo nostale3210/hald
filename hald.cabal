@@ -39,7 +39,6 @@ executable hald
     Hald.Deployment
     Hald.Diff
     Hald.Fail
-    Hald.Legacy
     Hald.Lock
     Hald.Space
     Hald.Status

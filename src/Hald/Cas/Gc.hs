@@ -5,7 +5,7 @@ import Control.Exception (IOException, bracket_, catch)
 import Control.Monad (unless, when)
 import Data.Set qualified as Set
 import Hald.Config qualified as Config
-import Hald.Legacy qualified as Legacy
+import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
@@ -54,8 +54,8 @@ collectGarbage conf keptDepIds = do
       casDir = hp </> "objects"
       workThreads = max 1 $ div threads 2
   refSets <- pooledForConcurrently keptDepIds $ \depId -> do
-    mRoot <- Legacy.resolveRootDir conf depId
-    case mRoot of
+    dep <- Dep.getDeployment depId conf
+    case Dep.rootDir dep of
       Just root -> do
         localSetVar <- newTVarIO Set.empty
         Util.walk (ParallelN 2) (refAction localSetVar) (root </> "usr")

@@ -8,7 +8,6 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Hald.Cas.Ingest qualified as CAS
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
-import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
@@ -21,9 +20,9 @@ import UnliftIO.Async (concurrently, pooledForConcurrently_)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
 createSkeleton depId conf uki backend =
-  Util.ensureDirExists (Legacy.treeRootDir conf depId)
-    >> writeFile (Legacy.treeRootDir conf depId <> "/backend") (show backend)
-    >> Util.createSymlink "usr/lib" (Legacy.treeRootDir conf depId <> "/lib")
+  Util.ensureDirExists (Dep.rootDirFor conf depId)
+    >> writeFile (Dep.rootDirFor conf depId <> "/backend") (show backend)
+    >> Util.createSymlink "usr/lib" (Dep.rootDirFor conf depId <> "/lib")
     >> if uki
       then Util.ensureDirExists (Config.ukiPath conf)
       else Util.ensureDirExists (Config.bootPath conf </> show depId)
@@ -49,7 +48,7 @@ generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
 
 syncSystemConfig :: Bool -> Config.Config -> Dep.Deployment -> IO ()
 syncSystemConfig dropState conf dep = do
-  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
+  let depPath = Dep.rootDirFor conf (Dep.identifier dep)
   if dropState
     then syncMinimumState depPath
     else syncState depPath
@@ -178,7 +177,7 @@ syncDeploymentUsr containerMount conf dep linkSource layerDiffs =
 
 syncDeploymentUsrHardlink :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> IO ()
 syncDeploymentUsrHardlink containerMount conf dep linkSource = do
-  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
+  let depPath = Dep.rootDirFor conf (Dep.identifier dep)
       depUsr = depPath <> "/usr"
   Util.ensureDirExists depUsr
   let rsyncArgs = ["-aHlx", containerMount <> "/usr/", depUsr <> "/"]
@@ -191,7 +190,7 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
 
 syncDeploymentUsrCas :: FilePath -> Config.Config -> Dep.Deployment -> [FilePath] -> IO ()
 syncDeploymentUsrCas containerMount conf dep layerDiffs = do
-  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
+  let depPath = Dep.rootDirFor conf (Dep.identifier dep)
       casDir = Config.haldPath conf <> "/objects"
       depUsr = depPath <> "/usr"
       assetMapPath = depPath <> "/assetmap"
@@ -209,7 +208,7 @@ syncDeploymentUsrCas containerMount conf dep layerDiffs = do
 
 syncDeploymentEtc :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 syncDeploymentEtc containerMount conf dep = do
-  let depPath = Legacy.treeRootDir conf (Dep.identifier dep)
+  let depPath = Dep.rootDirFor conf (Dep.identifier dep)
       depEtc = depPath <> "/etc"
       containerEtc = containerMount <> "/etc"
   Util.ensureDirExists depEtc
@@ -238,7 +237,7 @@ copyTree src dst =
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
 normalizeDepEtcTimestamps conf dep =
-  Util.walk Sequential action (Legacy.treeRootDir conf (Dep.identifier dep) <> "/etc")
+  Util.walk Sequential action (Dep.rootDirFor conf (Dep.identifier dep) <> "/etc")
   where
     action =
       TreeAction
@@ -250,11 +249,11 @@ normalizeDepEtcTimestamps conf dep =
 writeLockfile :: Config.Config -> Dep.Deployment -> IO ()
 writeLockfile conf dep = do
   let depId = Dep.identifier dep
-  Util.ioOrDie "Writing lockfile" $ writeFile (Legacy.treeLockfile conf depId) ""
+  Util.ioOrDie "Writing lockfile" $ writeFile (Dep.lockfileFor conf depId) ""
 
 modulePathSearch :: Config.Config -> Dep.Deployment -> FilePath -> IO FilePath
 modulePathSearch conf deployment target = do
-  let modulesDir = Legacy.treeRootDir conf (Dep.identifier deployment) <> "/usr/lib/modules"
+  let modulesDir = Dep.rootDirFor conf (Dep.identifier deployment) <> "/usr/lib/modules"
   fast <- shallowModulePath modulesDir target
   case fast of
     Just p -> return p
@@ -324,7 +323,7 @@ getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
 getPackageDB containerPath conf dep =
   Util.ioOrDie "Fetching package database" $
     Util.ensureDirExists
-      ( Legacy.treeRootDir conf (Dep.identifier dep)
+      ( Dep.rootDirFor conf (Dep.identifier dep)
           <> "/"
           <> takeDirectory (fromMaybe "" (Config.packageDB conf))
       )

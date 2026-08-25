@@ -7,13 +7,12 @@ where
 
 import Control.Concurrent (myThreadId, throwTo)
 import Control.Exception (AsyncException (UserInterrupt))
-import Control.Monad (forM_, unless)
+import Control.Monad (forM_, unless, when)
 import Data.Maybe qualified
 import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
 import Hald.Container qualified as Container
 import Hald.Deployment qualified as Dep
-import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Space qualified as Space
 import Hald.Util qualified as Util
@@ -30,8 +29,9 @@ cleanupOnError conf dep mMsgCont = do
     Just mc -> Util.printProgress mc "Fatal error. Cleaning up..."
     Nothing -> return ()
   let pending = Data.Maybe.fromMaybe Dep.dummyDeployment dep
-  depRoot <- Legacy.resolveRootDir conf (Dep.identifier pending)
-  forM_ depRoot $ Lock.umountDirForcibly Lock.Rfl
+      depRoot = Dep.rootDirFor conf (Dep.identifier pending)
+  depRootExists <- Util.pathExists depRoot
+  when depRootExists $ Lock.umountDirForcibly Lock.Rfl depRoot
   deployments <- Dep.getDeploymentsInt conf
   Space.gcBroken deployments conf
   failAndCleanup pending conf

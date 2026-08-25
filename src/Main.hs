@@ -8,7 +8,6 @@ import Hald.Assemble.Remove qualified as Asrm
 import Hald.Cli qualified as Cli
 import Hald.Config qualified as Config
 import Hald.Diff qualified as Diff
-import Hald.Legacy qualified as Legacy
 import Hald.Status qualified as Status
 import Hald.Util qualified as Util
 import Options.Applicative (execParser)
@@ -25,18 +24,16 @@ assembleAction parser = do
           then Config.applyConfigKey config ["interactive", show interactive]
           else config
       conf0 = Config.applyUserConfig config' userConf
-  legacyPaths <- Legacy.detectLegacyPaths conf0
-  let conf = conf0 {Config.legacyPaths = legacyPaths}
-  Util.setSystemThreads (Config.maxThreads conf)
+  Util.setSystemThreads (Config.maxThreads conf0)
   case Cli.optCommand parser of
-    Cli.Dep a b c d e f g h i -> Ascr.deploymentCreationAssemblyPre a b c d e f conf inhibit g h i
-    Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf inhibit
-    Cli.Gc -> Asgc.deploymentGcAssemblyPre conf inhibit
-    Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf inhibit
-    Cli.Cas Cli.CasGc -> Ascas.gcAssemblyPre conf inhibit
-    Cli.Cas Cli.CasFsverity -> Ascas.fsverityAssemblyPre conf inhibit
-    Cli.Status c -> Status.printDepStati conf c
-    Cli.Diff x y -> Diff.printDiff x y conf
+    Cli.Dep a b c d e f g h i -> Ascr.deploymentCreationAssemblyPre a b c d e f conf0 inhibit g h i
+    Cli.Rm x -> Asrm.deploymentErasureAssemblyPre x conf0 inhibit
+    Cli.Gc -> Asgc.deploymentGcAssemblyPre conf0 inhibit
+    Cli.Activate x -> Asac.deploymentActivationAssemblyPre x conf0 inhibit
+    Cli.Cas Cli.CasGc -> Ascas.gcAssemblyPre conf0 inhibit
+    Cli.Cas Cli.CasFsverity -> Ascas.fsverityAssemblyPre conf0 inhibit
+    Cli.Status c -> Status.printDepStati conf0 c
+    Cli.Diff x y -> Diff.printDiff x y conf0
   where
     inhibit = not $ Cli.optSystemd parser
     config =

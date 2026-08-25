@@ -11,7 +11,6 @@ import Hald.Container qualified as Container
 import Hald.Create qualified as Create
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail
-import Hald.Legacy qualified as Legacy
 import Hald.Lock qualified as Lock
 import Hald.Space qualified as Space
 import Hald.Util qualified as Util
@@ -91,14 +90,14 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki cas = do
         Util.printProgress msgCont ("Relabeling deployment " <> show (Dep.identifier newDep) <> "...")
         when cas
           $ Lock.clearRecursiveImmutable
-          $ Legacy.treeRootDir pbConf (Dep.identifier newDep) </> "usr"
+          $ Dep.rootDirFor pbConf (Dep.identifier newDep) </> "usr"
         Util.relabelSeLinuxPath
-          (Legacy.treeRootDir pbConf (Dep.identifier newDep))
+          (Dep.rootDirFor pbConf (Dep.identifier newDep))
           "/etc/selinux/targeted/contexts/files/file_contexts"
           (Config.bootPath pbConf)
         when cas $ do
-          Lock.setImmutable $ Legacy.treeRootDir pbConf (Dep.identifier newDep) </> "empty"
-          Lock.setImmutable $ Legacy.treeRootDir pbConf (Dep.identifier newDep) </> "usr/.hald_dep"
+          Lock.setImmutable $ Dep.rootDirFor pbConf (Dep.identifier newDep) </> "empty"
+          Lock.setImmutable $ Dep.rootDirFor pbConf (Dep.identifier newDep) </> "usr/.hald_dep"
 
       when sb $ do
         Util.printProgress msgCont ("Signing deployment " <> show (Dep.identifier newDep) <> " kernel...")
