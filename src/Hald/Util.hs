@@ -9,7 +9,7 @@ import Data.ByteString.Char8 qualified as C
 import Data.Either (fromRight)
 import Data.List (isInfixOf)
 import Data.Maybe (isJust)
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, listDirectory, removeFile)
+import System.Directory (copyFileWithMetadata, createDirectoryIfMissing, doesDirectoryExist, doesPathExist, findExecutable, getSymbolicLinkTarget, listDirectory, removeFile)
 import System.Environment (getArgs, getExecutablePath)
 import System.Exit (ExitCode (..))
 import System.FileLock (SharedExclusive (Exclusive), lockFile, tryLockFile)
@@ -17,7 +17,7 @@ import System.FilePath (takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 import System.IO.Error (isDoesNotExistError)
 import System.Posix (executeFile, getRealUserID, raiseSignal, sigINT, sigTERM)
-import System.Posix.Files (FileStatus, createSymbolicLink, getSymbolicLinkStatus, isDirectory, isSymbolicLink)
+import System.Posix.Files (FileStatus, createSymbolicLink, fileMode, getSymbolicLinkStatus, isDirectory, isSymbolicLink, setFileMode)
 import System.Process (readProcess, readProcessWithExitCode)
 import UnliftIO.Async (pooledForConcurrentlyN_)
 
@@ -290,3 +290,24 @@ walk strategy action = dispatch
       case strategy of
         Sequential -> forM_ entries processEntry
         ParallelN n -> pooledForConcurrentlyN_ n entries processEntry
+
+mirrorTree :: WalkStrategy -> FilePath -> (FilePath -> FilePath) -> IO ()
+mirrorTree strategy src mapPath =
+  walk strategy action src
+  where
+    action =
+      TreeAction
+        { dirAction = \p s -> do
+            let d = mapPath p
+            ensureDirExists d
+            setFileMode d (fileMode s),
+          symAction = \p _ -> do
+            let d = mapPath p
+            symTarget <- getSymbolicLinkTarget p
+            ensureDirExists (takeDirectory d)
+            createSymlink symTarget d,
+          fileAction = \p _ -> do
+            let d = mapPath p
+            ensureDirExists (takeDirectory d)
+            copyFileWithMetadata p d
+        }

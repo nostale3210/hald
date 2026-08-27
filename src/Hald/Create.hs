@@ -10,9 +10,9 @@ import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
-import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, doesFileExist, findExecutable, getSymbolicLinkTarget, removeFile)
+import System.Directory (copyFile, doesDirectoryExist, doesFileExist, findExecutable, removeFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
-import System.Posix (fileMode, modificationTime, setFileMode, setFileTimesHiRes, setSymbolicLinkTimesHiRes)
+import System.Posix (modificationTime, setFileTimesHiRes, setSymbolicLinkTimesHiRes)
 import UnliftIO.Async (concurrently, pooledForConcurrently_)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
@@ -141,24 +141,7 @@ syncSingleFile files destination
           (syncSingle p destination)
 
 syncSingle :: FilePath -> FilePath -> IO ()
-syncSingle path target = Util.walk Sequential action path
-  where
-    action =
-      TreeAction
-        { dirAction = \p s -> do
-            let d = target <> p
-            Util.ensureDirExists d
-            setFileMode d (fileMode s),
-          symAction = \p _ -> do
-            let d = target <> p
-            symTarget <- getSymbolicLinkTarget p
-            Util.ensureDirExists (takeDirectory d)
-            Util.createSymlink symTarget d,
-          fileAction = \p _ -> do
-            let d = target <> p
-            Util.ensureDirExists (takeDirectory d)
-            copyFileWithMetadata p d
-        }
+syncSingle path target = Util.mirrorTree Sequential path (\fp -> target <> fp)
 
 syncDeploymentUsr :: FilePath -> Config.Config -> Dep.Deployment -> Maybe Int -> [FilePath] -> IO ()
 syncDeploymentUsr containerMount conf dep linkSource layerDiffs =
@@ -206,25 +189,7 @@ syncDeploymentEtc containerMount conf dep = do
   Util.ioOrDie "Syncing deployment /etc" $ copyTree containerEtc depEtc
 
 copyTree :: FilePath -> FilePath -> IO ()
-copyTree src dst =
-  Util.walk (ParallelN 2) action src
-  where
-    action =
-      TreeAction
-        { dirAction = \p s -> do
-            let d = dst </> makeRelative src p
-            Util.ensureDirExists d
-            setFileMode d (fileMode s),
-          symAction = \p _ -> do
-            let d = dst </> makeRelative src p
-            symTarget <- getSymbolicLinkTarget p
-            Util.ensureDirExists (takeDirectory d)
-            Util.createSymlink symTarget d,
-          fileAction = \p _ -> do
-            let d = dst </> makeRelative src p
-            Util.ensureDirExists (takeDirectory d)
-            copyFileWithMetadata p d
-        }
+copyTree src dst = Util.mirrorTree (ParallelN 2) src (\fp -> dst </> makeRelative src fp)
 
 normalizeDepEtcTimestamps :: Config.Config -> Dep.Deployment -> IO ()
 normalizeDepEtcTimestamps conf dep =
