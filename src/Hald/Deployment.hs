@@ -164,7 +164,7 @@ readDepLockfile root = do
     then Just . parseDepId <$> readFile markerPath
     else return Nothing
   where
-    markerPath = root </> "usr/.hald_dep"
+    markerPath = root <> "/usr/.hald_dep"
     parseDepId content =
       case lines content of
         (l : _) -> maybe 0 fst $ listToMaybe $ reads l
