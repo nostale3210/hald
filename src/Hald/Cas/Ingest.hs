@@ -117,38 +117,35 @@ deployTreeFromFile casDir targetRoot emptyFile assetMapPath = do
     Nothing -> Util.fatal ("Invalid entry in assetmap " <> assetMapPath)
     Just assetMap -> do
       let entries = [(B8.unpack p, e) | (p, e) <- HashMap.toList assetMap]
-      pooledMapConcurrently_ (setMutableIfFile casDir) entries
+      pooledMapConcurrently_ (setFlagIfFile Lock.setMutable casDir) entries
       createDirectoryIfMissing True targetRoot
       pooledMapConcurrently_ (deployEntry casDir targetRoot emptyFile) entries
-      pooledMapConcurrently_ (setImmutableIfFile casDir) entries
+      pooledMapConcurrently_ (setFlagIfFile Lock.setImmutable casDir) entries
 
-setMutableIfFile :: FilePath -> (FilePath, TreeEntry) -> IO ()
-setMutableIfFile casDir (_, TreeFile p) = Lock.setMutable (casDir </> B8.unpack p)
-setMutableIfFile _ _ = return ()
+setFlagIfFile :: (FilePath -> IO ()) -> FilePath -> (FilePath, TreeEntry) -> IO ()
+setFlagIfFile flag casDir entry = case entry of
+  (_, TreeFile p) -> flag $ casDir </> B8.unpack p
+  _ -> return ()
 
-setImmutableIfFile :: FilePath -> (FilePath, TreeEntry) -> IO ()
-setImmutableIfFile casDir (_, TreeFile p) = Lock.setImmutable (casDir </> B8.unpack p)
-setImmutableIfFile _ _ = return ()
+ensureAbsentThen :: (FilePath -> IO Bool) -> FilePath -> IO () -> IO ()
+ensureAbsentThen exists targetPath action = do
+  present <- exists targetPath
+  unless present $ do
+    createDirectoryIfMissing True (takeDirectory targetPath)
+    action
 
 deployEntry :: FilePath -> FilePath -> FilePath -> (FilePath, TreeEntry) -> IO ()
 deployEntry casDir targetRoot emptyFile (relPath, entry) = case entry of
   TreeDir -> createDirectoryIfMissing True (targetRoot </> relPath)
-  TreeSymlink target -> do
+  TreeSymlink target ->
     let targetPath = targetRoot </> relPath
-    targetExists <- doesPathExist targetPath
-    unless targetExists $ do
-      createDirectoryIfMissing True (takeDirectory targetPath)
-      createSymbolicLink (B8.unpack target) targetPath
-  TreeFile casRelPath -> do
-    let casPath = casDir </> B8.unpack casRelPath
-        targetPath = targetRoot </> relPath
-    targetExists <- doesFileExist targetPath
-    unless targetExists $ do
-      createDirectoryIfMissing True (takeDirectory targetPath)
-      createLink casPath targetPath
-  TreeEmpty -> do
+     in ensureAbsentThen doesPathExist targetPath $
+          createSymbolicLink (B8.unpack target) targetPath
+  TreeFile casRelPath ->
     let targetPath = targetRoot </> relPath
-    targetExists <- doesFileExist targetPath
-    unless targetExists $ do
-      createDirectoryIfMissing True (takeDirectory targetPath)
-      createLink emptyFile targetPath
+     in ensureAbsentThen doesFileExist targetPath $
+          createLink (casDir </> B8.unpack casRelPath) targetPath
+  TreeEmpty ->
+    let targetPath = targetRoot </> relPath
+     in ensureAbsentThen doesFileExist targetPath $
+          createLink emptyFile targetPath
