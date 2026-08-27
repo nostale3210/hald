@@ -1,10 +1,12 @@
-module Hald.Assemble.Common (withRootfulAssembly) where
+module Hald.Assemble.Common (withRootfulAssembly, withHaldStoreUnmounted) where
 
-import Control.Exception (onException)
+import Control.Exception (bracket_, onException)
 import Data.Maybe (fromMaybe)
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail
+import Hald.Lock qualified as Lock
+import Hald.Mount qualified as Mount
 import Hald.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
@@ -20,3 +22,10 @@ withRootfulAssembly conf inhibit depAction body = do
   flip onException (Fail.cleanupOnError conf Nothing (Just msgCont)) $
     depAction >>= \mDep ->
       body msgCont (fromMaybe Dep.dummyDeployment mDep)
+
+withHaldStoreUnmounted :: Config.Config -> Lock.RecursiveUmount -> IO () -> IO ()
+withHaldStoreUnmounted conf mode body =
+  bracket_
+    (Lock.umountDirForcibly mode $ Config.haldPath conf)
+    (Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf)
+    body

@@ -3,6 +3,7 @@ module Hald.Assemble.Create where
 import Control.Monad (unless, when)
 import Data.Maybe (isNothing)
 import Hald.Assemble.Activate qualified as Asac
+import Hald.Assemble.Common qualified as Asm
 import Hald.Assemble.Gc qualified as Asgc
 import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
@@ -10,7 +11,6 @@ import Hald.Container qualified as Container
 import Hald.Create qualified as Create
 import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
-import Hald.Mount qualified as Mount
 import Hald.Space qualified as Space
 import Hald.Util qualified as Util
 import System.FilePath ((</>))
@@ -28,11 +28,10 @@ deploymentCreationAssembly act build keep gc up se conf msgCont newDep sb uki ha
   existingDeps <- Dep.getDeploymentsInt conf
   let backend = if hardlink then Dep.Hardlink else Dep.Cas
 
-  when updated $ do
+  when updated $ Asm.withHaldStoreUnmounted conf Lock.Simple $ do
     Util.printInfo
       ("Creating Deployment " <> show (Dep.identifier newDep) <> "...")
       (Config.interactive conf)
-    Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
     Space.gcBroken existingDeps conf
     remainingDeps <- Dep.getDeploymentsInt conf
     let linkSource = case filter (< Dep.identifier newDep) remainingDeps of
@@ -107,4 +106,3 @@ deploymentCreationAssembly act build keep gc up se conf msgCont newDep sb uki ha
     when gc $ performGC >> Asgc.deploymentGcAssembly pbConf msgCont
 
     unless gc $ CasGc.restoreStoreFlags pbConf
-    Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath pbConf
