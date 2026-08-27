@@ -1,6 +1,5 @@
 module Hald.Space where
 
-import Control.Exception (IOException, catch)
 import Control.Monad (when)
 import Data.List (sort)
 import Data.Maybe (fromMaybe, isJust)
@@ -50,12 +49,10 @@ rmComponent :: Int -> Config.Config -> String -> Maybe FilePath -> IO ()
 rmComponent ident conf component path =
   case path of
     Just p ->
-      catch
+      Util.catchInfoPrint
+        (Config.interactive conf)
+        ("Couldn't remove " <> show ident <> " " <> component)
         (removePathForcibly p)
-        ( \e ->
-            let err = show (e :: IOException)
-             in Util.printInfo ("Couldn't remove " <> show ident <> " " <> component <> "; " <> err) (Config.interactive conf)
-        )
     Nothing ->
       Util.printInfo
         ("Deployment " <> show ident <> ": No associated " <> component <> ".")
@@ -100,14 +97,10 @@ checkDep depId conf = do
           Just savedId
             | savedId /= depId -> do
                 let markerPath = r <> "/usr/.hald_dep"
-                catch
+                Util.catchInfoPrint
+                  (Config.interactive conf)
+                  ("Couldn't fix incorrect deployment id " <> show savedId)
                   (writeFile markerPath (show depId))
-                  ( \e ->
-                      let err = show (e :: IOException)
-                       in Util.printInfo
-                            ("Couldn't fix incorrect deployment id " <> show savedId <> "; " <> err)
-                            (Config.interactive conf)
-                  )
             | otherwise -> return ()
           Nothing -> return ()
       Nothing -> return ()

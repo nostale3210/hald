@@ -1,6 +1,5 @@
 module Hald.Container where
 
-import Control.Exception (IOException, catch)
 import Control.Monad (void)
 import Hald.Config qualified as Config
 import Hald.Util qualified as Util
@@ -25,21 +24,17 @@ mountContainer podName podUri =
 
 umountContainer :: String -> IO ()
 umountContainer podName =
-  catch
+  Util.catchInfoPrint
+    False
+    ("Unmounting container " <> podName <> " unsuccessful")
     (void $ Util.quietReadProcess "podman" ["unmount", podName] "")
-    ( \e ->
-        let err = show (e :: IOException)
-         in Util.printInfo ("Unmounting container " <> podName <> " unsuccessful\n" <> err) False
-    )
 
 rmContainer :: String -> IO ()
 rmContainer podName =
-  catch
+  Util.catchInfoPrint
+    False
+    ("Removing container " <> podName <> " unsuccessful")
     (void $ Util.quietReadProcess "podman" ["rm", "-f", podName] "")
-    ( \e ->
-        let err = show (e :: IOException)
-         in Util.printInfo ("Removing container " <> podName <> " unsuccessful\n" <> err) False
-    )
 
 buildImage :: Config.Config -> IO ()
 buildImage conf =

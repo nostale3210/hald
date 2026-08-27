@@ -86,12 +86,10 @@ ensureDirExists :: FilePath -> IO ()
 ensureDirExists dir =
   doesDirectoryExist dir >>= \dirExistence ->
     unless dirExistence $
-      catch
+      catchInfoPrint
+        False
+        ("Couldn't create missing directory " <> dir)
         (createDirectoryIfMissing True dir)
-        ( \e ->
-            let err = show (e :: IOException)
-             in printInfo ("Couldn't create missing directory " <> dir <> "; " <> err) False
-        )
 
 createSymlink :: FilePath -> FilePath -> IO ()
 createSymlink target link = do
@@ -234,6 +232,10 @@ printInfo status interactive =
   if interactive
     then C.putStrLn . C.pack $ "\r\ESC[K[Info] " <> status
     else C.putStrLn . C.pack $ "[Info] " <> status
+
+catchInfoPrint :: Bool -> String -> IO () -> IO ()
+catchInfoPrint interactive msg action =
+  catch action (\e -> printInfo (msg <> "; " <> show (e :: IOException)) interactive)
 
 printChannelMsg :: Stm.TChan String -> C.ByteString -> IO ()
 printChannelMsg channel bar = do

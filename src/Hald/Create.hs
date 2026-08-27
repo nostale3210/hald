@@ -1,7 +1,6 @@
 module Hald.Create where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
-import Control.Exception (IOException, catch)
 import Control.Monad (filterM, void, when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe, listToMaybe)
@@ -13,7 +12,6 @@ import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
 import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, doesFileExist, findExecutable, getSymbolicLinkTarget, removeFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
-import System.IO (hPutStrLn, stderr)
 import System.Posix (fileMode, modificationTime, setFileMode, setFileTimesHiRes, setSymbolicLinkTimesHiRes)
 import System.Process (readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrently_)
@@ -67,12 +65,10 @@ removeTmpFile :: FilePath -> IO ()
 removeTmpFile file =
   Util.pathExists file >>= \fileExists ->
     when fileExists $
-      catch
+      Util.catchInfoPrint
+        False
+        "Couldn't remove temporary files"
         (removeFile file)
-        ( \e ->
-            let err = show (e :: IOException)
-             in Util.printInfo ("Couldn't remove temporary files; " <> err) False
-        )
 
 mergeFileContents :: String -> String -> String
 mergeFileContents a b =
@@ -136,18 +132,14 @@ syncSingleFile files destination
   | otherwise = do
       destExists <- doesDirectoryExist destination
       when destExists $ pooledForConcurrently_ files $ \p ->
-        catch
-          (syncSingle p destination)
-          ( \e ->
-              let _ = show (e :: IOException)
-               in Util.printInfo
-                    ( "Some required files couldn't be synchronized: "
-                        <> p
-                        <> "\n"
-                        <> "Manual intervention might be necessary"
-                    )
-                    False
+        Util.catchInfoPrint
+          False
+          ( "Some required files couldn't be synchronized: "
+              <> p
+              <> "\n"
+              <> "Manual intervention might be necessary"
           )
+          (syncSingle p destination)
 
 syncSingle :: FilePath -> FilePath -> IO ()
 syncSingle path target = Util.walk Sequential action path
@@ -342,12 +334,13 @@ setDefaultBootEntry dep =
     >>= maybe
       (return ())
       ( \_ ->
-          catch
+          Util.catchInfoPrint
+            False
+            "Failed setting default boot entry"
             ( void $
                 Util.quietReadProcess
                   "bootctl"
                   ["set-default", "*" <> show dep <> "*"]
                   ""
             )
-            (\e -> let err = show (e :: IOException) in hPutStrLn stderr $ "Failed setting default boot entry: " <> err)
       )
