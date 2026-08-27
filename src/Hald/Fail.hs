@@ -7,7 +7,7 @@ where
 
 import Control.Concurrent (myThreadId, throwTo)
 import Control.Exception (AsyncException (UserInterrupt))
-import Control.Monad (forM_, unless, when)
+import Control.Monad (unless, when)
 import Data.Maybe qualified
 import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
