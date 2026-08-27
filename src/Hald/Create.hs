@@ -226,12 +226,15 @@ shallowModulePath modulesDir target = do
   hits <- filterM (\e -> doesFileExist (modulesDir </> e </> target)) entries
   return $ fmap (\e -> modulesDir </> e </> target) (listToMaybe hits)
 
+fetchKernelInitrd :: Config.Config -> Dep.Deployment -> IO (FilePath, FilePath)
+fetchKernelInitrd conf deployment =
+  concurrently
+    (modulePathSearch conf deployment "vmlinuz")
+    (modulePathSearch conf deployment "initramfs.img")
+
 placeBootFiles :: Config.Config -> Dep.Deployment -> IO ()
 placeBootFiles conf deployment = do
-  (kernel, initrd) <-
-    concurrently
-      (modulePathSearch conf deployment "vmlinuz")
-      (modulePathSearch conf deployment "initramfs.img")
+  (kernel, initrd) <- fetchKernelInitrd conf deployment
   let bootComps = Dep.bootComponents deployment
   case Dep.bootDir bootComps of
     Just x -> do
@@ -241,10 +244,7 @@ placeBootFiles conf deployment = do
 
 installUki :: Config.Config -> Dep.Deployment -> IO ()
 installUki conf deployment = do
-  (kernel, initrd) <-
-    concurrently
-      (modulePathSearch conf deployment "vmlinuz")
-      (modulePathSearch conf deployment "initramfs.img")
+  (kernel, initrd) <- fetchKernelInitrd conf deployment
   templCmdline <-
     Util.ioOrDie "Reading UKI cmdline"
       $ readFile
