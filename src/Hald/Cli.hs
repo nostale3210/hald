@@ -9,7 +9,6 @@ import Options.Applicative
     argument,
     command,
     eitherReader,
-    flag,
     footer,
     fullDesc,
     header,
@@ -23,6 +22,7 @@ import Options.Applicative
     progDesc,
     short,
     strOption,
+    switch,
     value,
   )
 import Text.Read (readMaybe)
@@ -81,9 +81,7 @@ commandOptions =
           <> value "/"
           <> help "Operate on a different root directory"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "skip-systemd-inhibit"
           <> help "Don't invoke systemd-inhibit even if available"
       )
@@ -96,72 +94,52 @@ depCommand =
 depOptions :: Parser Command
 depOptions =
   Dep
-    <$> flag
-      False
-      True
+    <$> switch
       ( long "activate"
           <> short 'a'
           <> help "Activate new deployment immediately after creation"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "build"
           <> short 'b'
           <> help "Build custom containerfile before creating deployment"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "drop-state"
           <> short 'd'
           <> help "Only keep essential configuration (fstab, passwd,...)"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "gc"
           <> short 'g'
           <> help "Perform garbage collection after creating deployment"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "update"
           <> short 'u'
           <> help "Pull latest container image before creating deployment"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "relabel"
           <> short 'z'
           <> help "Relabel new deployment according to selinux contexts"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "sb"
           <> short 's'
           <> help "Sign the deployment's kernel with sbctl"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "uki"
           <> short 'k'
           <> help "Build UKI using ukify"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "cas"
           <> short 'c'
           <> help "Use content-addressable store (CAS) backend (no-op)"
       )
-    <*> flag
-      False
-      True
+    <*> switch
       ( long "hardlink"
           <> short 'H'
           <> help "Use rsync hardlink backend"
@@ -194,9 +172,7 @@ statusCommand =
 statusOptions :: Parser Command
 statusOptions =
   Status
-    <$> flag
-      False
-      True
+    <$> switch
       ( long "compact"
           <> short 'c'
           <> help "Compact representation"
