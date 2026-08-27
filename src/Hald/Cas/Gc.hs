@@ -17,8 +17,12 @@ import System.Posix.Files (isRegularFile)
 import UnliftIO.Async (pooledForConcurrently, pooledForConcurrentlyN_, pooledForConcurrently_)
 import UnliftIO.Concurrent (getNumCapabilities)
 
-restoreStoreFlags :: Config.Config -> IO ()
-restoreStoreFlags conf = do
+forEachCasObject ::
+  Config.Config ->
+  (FilePath -> IO ()) ->
+  (FilePath -> FilePath -> FilePath -> IO ()) ->
+  IO ()
+forEachCasObject conf perPrefix perObject = do
   threads <- getNumCapabilities
   let casDir = Config.haldPath conf </> "objects"
       workThreads = max 1 $ div threads 2
@@ -27,13 +31,24 @@ restoreStoreFlags conf = do
     prefixes <- listDirectory casDir
     pooledForConcurrentlyN_ 2 prefixes $ \p -> do
       let casPath = casDir </> p
-      pExists <- doesDirectoryExist casPath
-      when pExists $ Lock.setImmutable casPath
+      perPrefix casPath
       objects <- listDirectory casPath
-      pooledForConcurrentlyN_ workThreads objects $ \o -> do
+      pooledForConcurrentlyN_ workThreads objects $ \o ->
+        perObject p casPath o
+
+restoreStoreFlags :: Config.Config -> IO ()
+restoreStoreFlags conf =
+  forEachCasObject
+    conf
+    ( \casPath -> do
+        pExists <- doesDirectoryExist casPath
+        when pExists $ Lock.setImmutable casPath
+    )
+    ( \_ casPath o -> do
         let casObj = casPath </> o
         oExists <- doesFileExist casObj
         when oExists $ Lock.setImmutable casObj
+    )
 
 enableFsVerityOnCas :: Config.Config -> IO ()
 enableFsVerityOnCas conf = do
@@ -87,24 +102,18 @@ stillPresent conf depId =
 
 deleteUnreferencedObjects :: Config.Config -> HashSet.HashSet B8.ByteString -> IO ()
 deleteUnreferencedObjects conf referenced = do
-  threads <- getNumCapabilities
-  let casDir = Config.haldPath conf </> "objects"
-      workThreads = max 1 $ div threads 2
-  dirExists <- doesDirectoryExist casDir
-  when dirExists $ do
-    prefixes <- listDirectory casDir
-    pooledForConcurrentlyN_ 2 prefixes $ \p -> do
-      let casPath = casDir </> p
-      Lock.setMutable casPath
-      objects <- listDirectory casPath
-      pooledForConcurrentlyN_ workThreads objects $ \o -> do
+  forEachCasObject
+    conf
+    Lock.setMutable
+    ( \p casPath o -> do
         let casObj = casPath </> o
         when (not (HashSet.member (B8.pack (p </> o)) referenced)) $ do
           Lock.setMutable casObj
           catch
             (removeFile casObj)
             (\e -> Util.printInfo (show (e :: IOException)) (Config.interactive conf))
-    removeEmptyDirectories casDir
+    )
+  removeEmptyDirectories (Config.haldPath conf </> "objects")
 
 removeEmptyDirectories :: FilePath -> IO ()
 removeEmptyDirectories = Util.walk (ParallelN 2) action
