@@ -1,7 +1,7 @@
 module Hald.Create where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
-import Control.Monad (filterM, when)
+import Control.Monad (filterM, forM_, when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Hald.Cas.Ingest qualified as CAS
@@ -46,19 +46,16 @@ generateBootEntry depId = Util.replaceString "INSERT_DEPLOYMENT" (show depId)
 syncSystemConfig :: Bool -> Config.Config -> Dep.Deployment -> IO ()
 syncSystemConfig dropState conf dep = do
   let depPath = Dep.rootDirFor conf (Dep.identifier dep)
+      sysFiles = ["passwd", "shadow", "group", "gshadow"]
   if dropState
     then syncMinimumState depPath
     else syncState depPath
-  Util.ioOrDie "Syncing system config" $ do
-    Util.runProcess_ "podman" ["cp", "hald-root:/etc/passwd", depPath <> "/.tmp.passwd"]
-    Util.runProcess_ "podman" ["cp", "hald-root:/etc/shadow", depPath <> "/.tmp.shadow"]
-    Util.runProcess_ "podman" ["cp", "hald-root:/etc/group", depPath <> "/.tmp.group"]
-  mergeFiles "/etc/passwd" (depPath <> "/.tmp.passwd") (depPath <> "/etc/passwd")
-    >> removeTmpFile (depPath <> "/.tmp.passwd")
-  mergeFiles "/etc/shadow" (depPath <> "/.tmp.shadow") (depPath <> "/etc/shadow")
-    >> removeTmpFile (depPath <> "/.tmp.shadow")
-  mergeFiles "/etc/group" (depPath <> "/.tmp.group") (depPath <> "/etc/group")
-    >> removeTmpFile (depPath <> "/.tmp.group")
+  Util.ioOrDie "Syncing system config" $
+    forM_ sysFiles $ \name ->
+      Util.runProcess_ "podman" ["cp", "hald-root:/etc/" <> name, depPath <> "/.tmp." <> name]
+  forM_ sysFiles $ \name -> do
+    mergeFiles ("/etc/" <> name) (depPath <> "/.tmp." <> name) (depPath <> "/etc/" <> name)
+    removeTmpFile (depPath <> "/.tmp." <> name)
 
 removeTmpFile :: FilePath -> IO ()
 removeTmpFile file =
