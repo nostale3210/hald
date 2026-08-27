@@ -6,6 +6,7 @@ import Hald.Config qualified as Config
 import Hald.Util qualified as Util
 import System.Directory (doesDirectoryExist)
 import System.FilePath ((</>))
+import Text.Read (readMaybe)
 
 data Backend = Hardlink | Cas deriving (Show, Eq)
 
@@ -130,11 +131,6 @@ getDeployment depId conf = do
         bootComponents = bComponents
       }
 
-parseIntStrict :: String -> Maybe Int
-parseIntStrict s = case reads s of
-  [(n, "")] -> Just n
-  _ -> Nothing
-
 getDeploymentsInt :: Config.Config -> IO [Int]
 getDeploymentsInt conf = do
   let bp = Config.bootPath conf
@@ -145,12 +141,12 @@ getDeploymentsInt conf = do
   beEntries <- Util.listDirSafe ep
   ukiEntries <- Util.listDirSafe up
   let bootIds =
-        mapMaybe parseIntStrict bdEntries
+        mapMaybe readMaybe bdEntries
           <> mapMaybe (stripExt ".conf") beEntries
           <> mapMaybe (stripExt ".efi") ukiEntries
   return $ Set.toList $ Set.fromList (treeDeps <> bootIds)
   where
-    stripExt ext = parseIntStrict . Util.removeString ext
+    stripExt ext = readMaybe . Util.removeString ext
 
 getCurrentDeploymentId :: FilePath -> IO Int
 getCurrentDeploymentId root = Data.Maybe.fromMaybe 0 <$> readDepLockfile root
@@ -159,7 +155,7 @@ findDeploymentIds :: Config.Config -> IO [Int]
 findDeploymentIds conf =
   mapMaybe treeEntryId <$> Util.listDirSafe (Config.haldPath conf </> "trees")
   where
-    treeEntryId = parseIntStrict . Util.removeString "."
+    treeEntryId = readMaybe . Util.removeString "."
 
 readDepLockfile :: FilePath -> IO (Maybe Int)
 readDepLockfile root = do

@@ -25,11 +25,12 @@ import Options.Applicative
     strOption,
     value,
   )
+import Text.Read (readMaybe)
 
 positiveInt :: ReadM Int
 positiveInt = eitherReader $ \s ->
-  case reads s of
-    [(n, "")] | n >= 0 -> Right n
+  case readMaybe s of
+    Just n | n >= 0 -> Right n
     _ -> Left "Expected a non-negative integer"
 
 data GlobalOpts = GlobalOpts

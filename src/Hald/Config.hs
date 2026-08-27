@@ -2,7 +2,9 @@ module Hald.Config where
 
 import Control.Exception (IOException, catch)
 import Data.List (foldl')
+import Data.Maybe (fromMaybe)
 import Hald.Util qualified as Util
+import Text.Read (readMaybe)
 
 data PackageManager
   = Apk
@@ -101,16 +103,13 @@ updateSingleKey conf key val =
         ]
     "containerUri" -> conf {containerUri = val}
     "localTag" -> conf {localTag = val}
-    "keepDeps" -> conf {keepDeps = readVal (keepDeps conf) val}
+    "keepDeps" -> conf {keepDeps = fromMaybe (keepDeps conf) (readMaybe val)}
     "rootDir" -> conf {rootDir = val}
-    "interactive" -> conf {interactive = readVal (interactive conf) val}
+    "interactive" -> conf {interactive = fromMaybe (interactive conf) (readMaybe val)}
     "packageManager" -> conf {packageManager = selectPm val}
     "packageDB" -> conf {packageDB = Just val}
-    "maxThreads" -> conf {maxThreads = readVal (maxThreads conf) val}
+    "maxThreads" -> conf {maxThreads = fromMaybe (maxThreads conf) (readMaybe val)}
     _ -> conf
-
-readVal :: (Read a) => a -> String -> a
-readVal def s = case reads s of [(v, "")] -> v; _ -> def
 
 selectPm :: String -> PackageManager
 selectPm strMgr =
