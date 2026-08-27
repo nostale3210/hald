@@ -104,7 +104,9 @@ quietReadProcess :: FilePath -> [String] -> String -> IO String
 quietReadProcess cmd args input = do
   (ec, out, _) <- readProcessWithExitCode cmd args input
   case ec of
-    ExitSuccess -> return out
+    ExitSuccess -> return $ case reverse out of
+      ('\n' : rest) -> reverse rest
+      _ -> out
     ExitFailure n -> ioError (userError (cmd <> " failed with exit code " <> show n))
 
 recursiveFileSearch :: FilePath -> FilePath -> IO [FilePath]

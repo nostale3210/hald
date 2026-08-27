@@ -17,10 +17,9 @@ mountContainer podName podUri =
           ["create", "--replace", "--name", podName, podUri]
           ""
     )
-    >> Util.removeString "\n"
-      <$> Util.ioOrDie
-        "Mounting container"
-        (readProcess "podman" ["mount", "hald-root"] [])
+    >> Util.ioOrDie
+      "Mounting container"
+      (Util.quietReadProcess "podman" ["mount", "hald-root"] "")
 
 umountContainer :: String -> IO ()
 umountContainer podName =
@@ -71,14 +70,13 @@ pullImage conf = do
 getLayerInfo :: String -> IO [FilePath]
 getLayerInfo name = do
   lower <-
-    Util.removeString "\n"
-      <$> Util.ioOrDie
-        "Getting container layer directories"
-        ( readProcess
-            "podman"
-            ["inspect", "--format", "{{index .GraphDriver.Data \"LowerDir\"}}", name]
-            ""
-        )
+    Util.ioOrDie
+      "Getting container layer directories"
+      ( Util.quietReadProcess
+          "podman"
+          ["inspect", "--format", "{{index .GraphDriver.Data \"LowerDir\"}}", name]
+          ""
+      )
   return $ filter (not . null) $ Util.splitOnChar ':' lower
 
 findInLayers :: [FilePath] -> FilePath -> IO (Maybe FilePath)
