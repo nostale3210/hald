@@ -60,6 +60,11 @@ takeUntil input stopChar =
         else [x] <> takeUntil xs stopChar
     _ -> input
 
+splitOnChar :: Char -> String -> [String]
+splitOnChar c s = case break (== c) s of
+  (w, []) -> [w]
+  (w, _ : r) -> w : splitOnChar c r
+
 newIdentifier :: [Int] -> Int
 newIdentifier idents =
   case idents of

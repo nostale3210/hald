@@ -84,14 +84,7 @@ getLayerInfo name = do
             ["inspect", "--format", "{{index .GraphDriver.Data \"LowerDir\"}}", name]
             ""
         )
-  return $ filter (not . null) $ splitOn ':' lower
-  where
-    splitOn _ [] = []
-    splitOn c s =
-      let (w, r) = break (== c) s
-       in w : case r of
-            [] -> []
-            (_ : t) -> splitOn c t
+  return $ filter (not . null) $ Util.splitOnChar ':' lower
 
 findInLayers :: [FilePath] -> FilePath -> IO (Maybe FilePath)
 findInLayers [] _ = return Nothing
