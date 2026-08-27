@@ -4,11 +4,11 @@ import Control.Exception (IOException, bracketOnError, try)
 import Control.Monad (unless, void, when)
 import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
+import Hald.Mount qualified as Mount
 import Hald.Util qualified as Util
 import System.Directory (removePathForcibly)
 import System.FilePath ((</>))
 import System.Posix.Signals (addSignal, blockSignals, emptySignalSet, sigINT, sigTERM, unblockSignals)
-import System.Process (readProcess)
 import UnliftIO.Async (concurrently)
 
 getNewRoot :: Dep.Deployment -> IO FilePath
@@ -16,14 +16,6 @@ getNewRoot nextDep =
   case Dep.rootDir nextDep of
     Nothing -> Util.fatalWith "nextDep doesn't supply rootDir" ""
     Just x -> return x
-
-moveMountBeneath :: FilePath -> FilePath -> IO ()
-moveMountBeneath fromPath toPath =
-  void $ Util.quietReadProcess "mount" ["--move", "--beneath", fromPath, toPath] ""
-
-legacyMoveMountBeneath :: FilePath -> FilePath -> IO ()
-legacyMoveMountBeneath fromPath toPath =
-  void $ Util.quietReadProcess "move-mount" ["-mb", fromPath, toPath] ""
 
 ensureOverlayEmptyDir :: FilePath -> IO ()
 ensureOverlayEmptyDir hp = do
@@ -35,42 +27,14 @@ ensureOverlayEmptyDir hp = do
     mapM_ (removePathForcibly . (emptyDir </>)) dirContents
   Lock.setImmutable emptyDir
 
-usrOverlayMount :: FilePath -> FilePath -> FilePath -> IO ()
-usrOverlayMount hp fromPath toPath =
-  Util.ioOrDie "Mounting overlay usr"
-    $ void
-    $ readProcess
-      "mount"
-      [ "-t",
-        "overlay",
-        "usr-root",
-        "--make-private",
-        "-o",
-        "lowerdir=" <> fromPath <> ":" <> hp <> "/empty",
-        toPath
-      ]
-      ""
-
-privateMount :: FilePath -> IO ()
-privateMount path =
-  Util.ioOrDie "Making mount private"
-    $ void
-    $ readProcess "mount" ["--make-private", path] ""
-
-bindMount :: FilePath -> FilePath -> IO ()
-bindMount fromPath toPath =
-  Util.ioOrDie "Binding mount"
-    $ void
-    $ readProcess "mount" ["-o", "bind", "--make-private", fromPath, toPath] ""
-
 prepareMounts :: FilePath -> FilePath -> FilePath -> Bool -> Bool -> IO ()
 prepareMounts root hp newRoot usrMounted etcMounted = do
   when usrMounted $ do
-    privateMount (root <> "/usr")
-    usrOverlayMount hp (newRoot <> "/usr") (newRoot <> "/usr")
+    Mount.privateMount (root <> "/usr")
+    Mount.usrOverlayMount hp (newRoot <> "/usr") (newRoot <> "/usr")
   when etcMounted $ do
-    privateMount (root <> "/etc")
-    bindMount (newRoot <> "/etc") (newRoot <> "/etc")
+    Mount.privateMount (root <> "/etc")
+    Mount.bindMount (newRoot <> "/etc") (newRoot <> "/etc")
 
 releasePrepMounts :: FilePath -> Bool -> Bool -> IO ()
 releasePrepMounts newRoot usrMounted etcMounted = do
@@ -85,8 +49,8 @@ releaseActiveMounts root usrMounted etcMounted = do
 swapMountsBeneath :: FilePath -> FilePath -> FilePath -> Bool -> Bool -> Bool -> IO ()
 swapMountsBeneath root hp newRoot usrMounted etcMounted useBeneath =
   let move
-        | useBeneath = moveMountBeneath
-        | otherwise = legacyMoveMountBeneath
+        | useBeneath = Mount.moveMountBeneath
+        | otherwise = Mount.legacyMoveMountBeneath
    in bracketOnError
         (prepareMounts root hp newRoot usrMounted etcMounted)
         (\_ -> releasePrepMounts newRoot usrMounted etcMounted)
@@ -105,16 +69,16 @@ activateNewRoot root hp newDep = do
       signals = addSignal sigTERM . addSignal sigINT $ emptySignalSet
   when (oldId /= newId) $ do
     newRoot <- getNewRoot newDep
-    usrMounted <- Util.isMountpoint $ root <> "/usr"
-    etcMounted <- Util.isMountpoint $ root <> "/etc"
+    usrMounted <- Mount.isMountpoint $ root <> "/usr"
+    etcMounted <- Mount.isMountpoint $ root <> "/etc"
     useBeneath <- Util.hasMountBeneath
 
-    privateMount hp
+    Mount.privateMount hp
     blockSignals signals
 
     result <- try @IOException $ do
-      unless usrMounted $ usrOverlayMount hp (newRoot <> "/usr") (root <> "/usr")
-      unless etcMounted $ bindMount (newRoot <> "/etc") (root <> "/etc")
+      unless usrMounted $ Mount.usrOverlayMount hp (newRoot <> "/usr") (root <> "/usr")
+      unless etcMounted $ Mount.bindMount (newRoot <> "/etc") (root <> "/etc")
       when (usrMounted || etcMounted) $
         swapMountsBeneath root hp newRoot usrMounted etcMounted useBeneath
 

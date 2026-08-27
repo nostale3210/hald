@@ -14,6 +14,7 @@ import Hald.Config qualified as Config
 import Hald.Container qualified as Container
 import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
+import Hald.Mount qualified as Mount
 import Hald.Space qualified as Space
 import Hald.Util qualified as Util
 import System.Posix.Signals (Handler (CatchInfoOnce), Signal, installHandler)
@@ -42,4 +43,4 @@ failAndCleanup dep conf = do
   CasGc.restoreStoreFlags conf
   Container.umountContainer "hald-root"
   Container.rmContainer "hald-root"
-  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
+  Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf

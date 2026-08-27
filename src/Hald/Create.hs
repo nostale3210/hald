@@ -1,7 +1,7 @@
 module Hald.Create where
 
 import Control.Concurrent.STM (atomically, modifyTVar', newTVarIO, readTVarIO)
-import Control.Monad (filterM, void, when)
+import Control.Monad (filterM, when)
 import Data.List (nubBy)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Hald.Cas.Ingest qualified as CAS
@@ -13,7 +13,6 @@ import Hald.Util qualified as Util
 import System.Directory (copyFile, copyFileWithMetadata, doesDirectoryExist, doesFileExist, findExecutable, getSymbolicLinkTarget, removeFile)
 import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.Posix (fileMode, modificationTime, setFileMode, setFileTimesHiRes, setSymbolicLinkTimesHiRes)
-import System.Process (readProcess)
 import UnliftIO.Async (concurrently, pooledForConcurrently_)
 
 createSkeleton :: Int -> Config.Config -> Bool -> Dep.Backend -> IO ()
@@ -51,9 +50,9 @@ syncSystemConfig dropState conf dep = do
     then syncMinimumState depPath
     else syncState depPath
   Util.ioOrDie "Syncing system config" $ do
-    void $ readProcess "podman" ["cp", "hald-root:/etc/passwd", depPath <> "/.tmp.passwd"] ""
-    void $ readProcess "podman" ["cp", "hald-root:/etc/shadow", depPath <> "/.tmp.shadow"] ""
-    void $ readProcess "podman" ["cp", "hald-root:/etc/group", depPath <> "/.tmp.group"] ""
+    Util.runProcess_ "podman" ["cp", "hald-root:/etc/passwd", depPath <> "/.tmp.passwd"]
+    Util.runProcess_ "podman" ["cp", "hald-root:/etc/shadow", depPath <> "/.tmp.shadow"]
+    Util.runProcess_ "podman" ["cp", "hald-root:/etc/group", depPath <> "/.tmp.group"]
   mergeFiles "/etc/passwd" (depPath <> "/.tmp.passwd") (depPath <> "/etc/passwd")
     >> removeTmpFile (depPath <> "/.tmp.passwd")
   mergeFiles "/etc/shadow" (depPath <> "/.tmp.shadow") (depPath <> "/etc/shadow")
@@ -176,7 +175,7 @@ syncDeploymentUsrHardlink containerMount conf dep linkSource = do
       rsyncCmd = case linkSource of
         Just src -> rsyncArgs <> ["--link-dest=../../" <> show src <> "/usr"]
         Nothing -> rsyncArgs
-  Util.ioOrDie "Syncing deployment /usr" $ void $ readProcess "rsync" rsyncCmd ""
+  Util.ioOrDie "Syncing deployment /usr" $ Util.runProcess_ "rsync" rsyncCmd
   Util.ioOrDie "Writing deployment marker" $
     writeFile (depPath <> "/usr/.hald_dep") (show (Dep.identifier dep))
 
@@ -298,9 +297,8 @@ installUki conf deployment = do
   let bootComps = Dep.bootComponents deployment
   case Dep.ukiPath bootComps of
     Just x ->
-      Util.ioOrDie "Building UKI"
-        $ void
-        $ Util.quietReadProcess
+      Util.ioOrDie "Building UKI" $
+        Util.runProcess_
           "ukify"
           [ "build",
             "--linux=" <> kernel,
@@ -308,7 +306,6 @@ installUki conf deployment = do
             "--cmdline=" <> cmdline,
             "--output=" <> x
           ]
-          ""
     Nothing -> Util.fatal $ "No UKI path supplied for deployment " <> show (Dep.identifier deployment)
 
 getPackageDB :: FilePath -> Config.Config -> Dep.Deployment -> IO ()
@@ -319,14 +316,12 @@ getPackageDB containerPath conf dep =
           <> "/"
           <> takeDirectory (fromMaybe "" (Config.packageDB conf))
       )
-      >> readProcess
+      >> Util.runProcess_
         "rsync"
         [ "-a",
           containerPath <> fromMaybe "" (Config.packageDB conf),
           fromMaybe "" (Dep.rootDir dep) <> "/" <> takeDirectory (fromMaybe "" (Config.packageDB conf)) <> "/"
         ]
-        ""
-      >> return ()
 
 setDefaultBootEntry :: Int -> IO ()
 setDefaultBootEntry dep =
@@ -337,10 +332,8 @@ setDefaultBootEntry dep =
           Util.catchInfoPrint
             False
             "Failed setting default boot entry"
-            ( void $
-                Util.quietReadProcess
-                  "bootctl"
-                  ["set-default", "*" <> show dep <> "*"]
-                  ""
+            ( Util.runProcess_
+                "bootctl"
+                ["set-default", "*" <> show dep <> "*"]
             )
       )

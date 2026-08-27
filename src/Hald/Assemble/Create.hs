@@ -12,6 +12,7 @@ import Hald.Create qualified as Create
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail
 import Hald.Lock qualified as Lock
+import Hald.Mount qualified as Mount
 import Hald.Space qualified as Space
 import Hald.Util qualified as Util
 import System.FilePath ((</>))
@@ -117,4 +118,4 @@ deploymentCreationAssembly act build keep gc up se conf msgCont sb uki _cas hard
       when gc $ performGC >> Asgc.deploymentGcAssembly pbConf msgCont
 
       unless gc $ CasGc.restoreStoreFlags pbConf
-      Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath pbConf
+      Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath pbConf

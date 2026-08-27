@@ -41,6 +41,7 @@ executable hald
     Hald.Diff
     Hald.Fail
     Hald.Lock
+    Hald.Mount
     Hald.Space
     Hald.Status
     Hald.Util

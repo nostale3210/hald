@@ -1,6 +1,5 @@
 module Hald.Container where
 
-import Control.Monad (void)
 import Hald.Config qualified as Config
 import Hald.Util qualified as Util
 import System.Directory (doesFileExist)
@@ -11,12 +10,7 @@ mountContainer :: String -> String -> IO FilePath
 mountContainer podName podUri =
   Util.ioOrDie
     "Creating container"
-    ( void $
-        Util.quietReadProcess
-          "podman"
-          ["create", "--replace", "--name", podName, podUri]
-          ""
-    )
+    (Util.runProcess_ "podman" ["create", "--replace", "--name", podName, podUri])
     >> Util.ioOrDie
       "Mounting container"
       (Util.quietReadProcess "podman" ["mount", "hald-root"] "")
@@ -26,14 +20,14 @@ umountContainer podName =
   Util.catchInfoPrint
     False
     ("Unmounting container " <> podName <> " unsuccessful")
-    (void $ Util.quietReadProcess "podman" ["unmount", podName] "")
+    (Util.runProcess_ "podman" ["unmount", podName])
 
 rmContainer :: String -> IO ()
 rmContainer podName =
   Util.catchInfoPrint
     False
     ("Removing container " <> podName <> " unsuccessful")
-    (void $ Util.quietReadProcess "podman" ["rm", "-f", podName] "")
+    (Util.runProcess_ "podman" ["rm", "-f", podName])
 
 buildImage :: Config.Config -> IO ()
 buildImage conf =

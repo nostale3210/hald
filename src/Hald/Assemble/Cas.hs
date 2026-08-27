@@ -6,6 +6,7 @@ import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail
 import Hald.Lock qualified as Lock
+import Hald.Mount qualified as Mount
 import Hald.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
@@ -24,7 +25,7 @@ gcAssembly conf msgCont = do
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
   CasGc.collectGarbage conf allDeps
   CasGc.restoreStoreFlags conf
-  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
+  Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf
 
 fsverityAssemblyPre :: Config.Config -> Bool -> IO ()
 fsverityAssemblyPre conf inhibit = do
@@ -38,4 +39,4 @@ fsverityAssembly conf msgCont = do
   Util.printProgress msgCont "Enabling fs-verity on all CAS objects..."
   Lock.umountDirForcibly Lock.Simple $ Config.haldPath conf
   CasGc.enableFsVerityOnCas conf
-  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
+  Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf

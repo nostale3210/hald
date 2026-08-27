@@ -6,7 +6,7 @@ import Hald.Activate qualified as Activate
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail
-import Hald.Lock qualified as Lock
+import Hald.Mount qualified as Mount
 import Hald.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
 
@@ -22,17 +22,17 @@ deploymentActivationAssembly newDepId conf msgCont = do
   Util.printInfo ("Activating deployment " <> show newDepId <> "...") (Util.interactive msgCont)
   Util.printProgress msgCont ("Activating deployment " <> show newDepId <> "...")
   Activate.ensureOverlayEmptyDir (Config.haldPath conf)
-  haldMounted <- Util.isMountpoint (Config.haldPath conf)
+  haldMounted <- Mount.isMountpoint (Config.haldPath conf)
 
   newDep <-
     Dep.getDeployment newDepId conf
   unless
     haldMounted
-    (Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf)
+    (Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf)
   Activate.activateNewRoot
     (Config.rootDir conf)
     (Config.haldPath conf)
     newDep
-  Lock.roRemountDir Lock.Rw $ root <> "etc"
+  Mount.roRemountDir Mount.Rw $ root <> "etc"
   where
     root = Config.rootDir conf <> "/"

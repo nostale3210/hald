@@ -12,18 +12,10 @@ import Foreign.Marshal.Alloc (alloca, allocaBytes)
 import Foreign.Marshal.Utils (fillBytes)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (poke, pokeByteOff)
+import Hald.Mount qualified as Mount
 import Hald.Util (TreeAction (..), WalkStrategy (..))
 import Hald.Util qualified as Util
 import System.Posix.Files (accessTimeHiRes, fileGroup, fileMode, fileOwner, fileSize, getFileStatus, modificationTimeHiRes, setFileMode, setFileTimesHiRes, setOwnerAndGroup)
-import System.Process (readProcess)
-
-data ReadMode
-  = Ro
-  | Rw
-
-instance Show ReadMode where
-  show Ro = "ro"
-  show Rw = "rw"
 
 data RecursiveUmount
   = Rfl
@@ -51,44 +43,12 @@ clearRecursiveImmutable fp = Util.ioOrPass $ Util.walk (ParallelN 4) action fp
           fileAction = \p _ -> setFileFlag p 0
         }
 
-roBindMountDirToSelf :: ReadMode -> FilePath -> IO ()
-roBindMountDirToSelf readMode dirPath =
-  catch
-    ( do
-        mounted <- Util.isMountpoint dirPath
-        unless mounted
-          $ void
-          $ readProcess
-            "mount"
-            ["-o", "bind," <> show readMode, "--make-private", dirPath, dirPath]
-            ""
-    )
-    ( \e ->
-        let err = show (e :: IOException)
-         in putStrLn $ "Failed to bind mount " <> dirPath <> "; " <> err
-    )
-
-roRemountDir :: ReadMode -> FilePath -> IO ()
-roRemountDir readMode dirPath =
-  catch
-    ( do
-        mounted <- Util.isMountpoint dirPath
-        when mounted
-          $ void
-          $ readProcess "mount" ["-o", "remount," <> show readMode, dirPath] ""
-    )
-    ( \e ->
-        let err = show (e :: IOException)
-         in putStrLn $ "Failed to remount mount " <> dirPath <> "; " <> err
-    )
-
 umountDirForcibly :: RecursiveUmount -> FilePath -> IO ()
 umountDirForcibly opts dirPath = do
-  mounted <- Util.isMountpoint dirPath
+  mounted <- Mount.isMountpoint dirPath
   when mounted
     $ Util.ioOrPass
-    $ void
-    $ readProcess "umount" ["-" <> show opts, dirPath] ""
+    $ Util.runProcess_ "umount" ["-" <> show opts, dirPath]
 
 foreign import capi "linux/fs.h value FS_IOC_SETFLAGS"
   fsIocSetflags :: CULong

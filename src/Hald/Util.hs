@@ -96,10 +96,6 @@ createSymlink target link = do
   catch (removeFile link) (\e -> if isDoesNotExistError e then return () else ioError e)
   catch (createSymbolicLink target link) ioError
 
-isMountpoint :: FilePath -> IO Bool
-isMountpoint path =
-  ioOrDefault False $ quietReadProcess "mountpoint" ["-q", path] "" >> return True
-
 quietReadProcess :: FilePath -> [String] -> String -> IO String
 quietReadProcess cmd args input = do
   (ec, out, _) <- readProcessWithExitCode cmd args input
@@ -108,6 +104,9 @@ quietReadProcess cmd args input = do
       ('\n' : rest) -> reverse rest
       _ -> out
     ExitFailure n -> ioError (userError (cmd <> " failed with exit code " <> show n))
+
+runProcess_ :: FilePath -> [String] -> IO ()
+runProcess_ cmd args = void $ quietReadProcess cmd args ""
 
 recursiveFileSearch :: FilePath -> FilePath -> IO [FilePath]
 recursiveFileSearch rootDir fileName = do
@@ -128,16 +127,16 @@ recursiveFileSearch rootDir fileName = do
 
 relabelSeLinuxPath :: FilePath -> FilePath -> FilePath -> IO ()
 relabelSeLinuxPath rootPath contexts bp = do
-  ioOrDie "Relabeling boot directory"
-    $ void
-    $ quietReadProcess "restorecon" ["-RF", bp] ""
+  ioOrDie "Relabeling boot directory" $
+    runProcess_ "restorecon" ["-RF", bp]
   ioOrDie "Relabeling root directory" $ do
     createSymlink "usr/lib" (rootPath <> "/lib")
     createSymlink "usr/lib64" (rootPath <> "/lib64")
     threads <- getNumCapabilities
-    ioOrPass
-      $ void
-      $ quietReadProcess "chroot" [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"] ""
+    ioOrPass $
+      runProcess_
+        "chroot"
+        [rootPath, "/usr/bin/setfiles", "-F", "-T", show threads, contexts, "/"]
 
 getUserId :: IO Int
 getUserId = fromIntegral <$> getRealUserID
@@ -163,7 +162,7 @@ signKernel bp dep target =
         if kernelExists
           then
             ioOrDefault False $
-              quietReadProcess "sbctl" ["sign", kernelPath] "" >> return True
+              runProcess_ "sbctl" ["sign", kernelPath] >> return True
           else
             fatalWith ("Kernel for deployment " <> show dep <> " doesn't seem to exist.") False
 

@@ -8,6 +8,7 @@ import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Fail qualified as Fail
 import Hald.Lock qualified as Lock
+import Hald.Mount qualified as Mount
 import Hald.Space qualified as Space
 import Hald.Util qualified as Util
 import System.Posix.Signals (sigINT, sigTERM)
@@ -32,4 +33,4 @@ deploymentGcAssembly conf msgCont = do
   when (sort allDeps /= sort remainingDeps) $
     CasGc.collectGarbage conf remainingDeps
   CasGc.restoreStoreFlags conf
-  Lock.roBindMountDirToSelf Lock.Ro $ Config.haldPath conf
+  Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf
