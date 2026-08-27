@@ -26,6 +26,7 @@ executable hald
     Hald.Activate
     Hald.Assemble.Activate
     Hald.Assemble.Cas
+    Hald.Assemble.Common
     Hald.Assemble.Create
     Hald.Assemble.Gc
     Hald.Assemble.Remove
