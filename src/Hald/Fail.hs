@@ -6,7 +6,7 @@ module Hald.Fail
 where
 
 import Control.Concurrent (myThreadId, throwTo)
-import Control.Exception (AsyncException (UserInterrupt))
+import Control.Exception (AsyncException (UserInterrupt), bracket_)
 import Control.Monad (unless, when)
 import Data.Maybe qualified
 import Hald.Cas.Gc qualified as CasGc
@@ -30,12 +30,13 @@ cleanupOnError conf dep mMsgCont = do
     Just mc -> Util.printProgress mc "Fatal error. Cleaning up..."
     Nothing -> return ()
   let pending = Data.Maybe.fromMaybe Dep.dummyDeployment dep
-      depRoot = Dep.rootDirFor conf (Dep.identifier pending)
-  depRootExists <- Util.pathExists depRoot
-  when depRootExists $ Lock.umountDirForcibly Lock.Rfl depRoot
-  deployments <- Dep.getDeploymentsInt conf
-  Space.gcBroken deployments conf
-  failAndCleanup pending conf
+  bracket_
+    (Lock.umountDirForcibly Lock.Rfl (Config.haldPath conf))
+    (Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf)
+    $ do
+      deployments <- Dep.getDeploymentsInt conf
+      Space.gcBroken deployments conf
+      failAndCleanup pending conf
 
 failAndCleanup :: Dep.Deployment -> Config.Config -> IO ()
 failAndCleanup dep conf = do
@@ -43,4 +44,3 @@ failAndCleanup dep conf = do
   CasGc.restoreStoreFlags conf
   Container.umountContainer "hald-root"
   Container.rmContainer "hald-root"
-  Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf

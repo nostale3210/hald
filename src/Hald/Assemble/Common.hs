@@ -19,9 +19,9 @@ withRootfulAssembly ::
 withRootfulAssembly conf inhibit depAction body = do
   msgCont <- Util.genericRootfulPreproc (Config.configPath conf <> "/.hald.lock") (Config.interactive conf) inhibit
   Fail.installAsyncHandler [sigINT, sigTERM]
-  flip onException (Fail.cleanupOnError conf Nothing (Just msgCont)) $
-    depAction >>= \mDep ->
-      body msgCont (fromMaybe Dep.dummyDeployment mDep)
+  mDep <- depAction
+  flip onException (Fail.cleanupOnError conf mDep (Just msgCont)) $
+    body msgCont (fromMaybe Dep.dummyDeployment mDep)
 
 withHaldStoreUnmounted :: Config.Config -> Lock.RecursiveUmount -> IO () -> IO ()
 withHaldStoreUnmounted conf mode body =
