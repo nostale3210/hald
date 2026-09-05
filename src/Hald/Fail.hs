@@ -7,7 +7,7 @@ where
 
 import Control.Concurrent (myThreadId, throwTo)
 import Control.Exception (AsyncException (UserInterrupt), bracket_)
-import Control.Monad (unless, when)
+import Control.Monad (unless)
 import Data.Maybe qualified
 import Hald.Cas.Gc qualified as CasGc
 import Hald.Config qualified as Config
@@ -31,7 +31,7 @@ cleanupOnError conf dep mMsgCont = do
     Nothing -> return ()
   let pending = Data.Maybe.fromMaybe Dep.dummyDeployment dep
   bracket_
-    (Lock.umountDirForcibly Lock.Rfl (Config.haldPath conf))
+    (Lock.umountDirForcibly Lock.Rfl $ Config.haldPath conf)
     (Mount.roBindMountDirToSelf Mount.Ro $ Config.haldPath conf)
     $ do
       deployments <- Dep.getDeploymentsInt conf
