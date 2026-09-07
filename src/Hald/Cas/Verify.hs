@@ -12,9 +12,8 @@ import Hald.Util qualified as Util
 import System.FilePath ((</>))
 import UnliftIO.Async (pooledMapConcurrently)
 
-getDeploymentDigest :: Config.Config -> Int -> IO (Maybe BS.ByteString)
-getDeploymentDigest conf depId = do
-  dep <- Dep.getDeployment depId conf
+getDeploymentDigest :: Config.Config -> Dep.Deployment -> IO (Maybe BS.ByteString)
+getDeploymentDigest conf dep = do
   case Dep.backend dep of
     Dep.Hardlink -> return $ Just BS.empty
     Dep.Cas -> case Dep.rootDir dep of

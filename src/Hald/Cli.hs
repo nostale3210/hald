@@ -39,7 +39,7 @@ data GlobalOpts = GlobalOpts
     optCommand :: !Command
   }
 
-data CasCommand = CasGc | CasFsverity
+data CasCommand = CasGc | CasFsverity | CasVerify Int
 
 data Command
   = Dep
@@ -190,7 +190,7 @@ diffOptions =
 
 casCommand :: Mod CommandFields Command
 casCommand =
-  command "cas" (info (Cas <$> hsubparser (casGcCommand <> casFsverityCommand)) (progDesc "CAS operations"))
+  command "cas" (info (Cas <$> hsubparser (casGcCommand <> casFsverityCommand <> casVerifyCommand)) (progDesc "CAS operations"))
 
 casGcCommand :: Mod CommandFields CasCommand
 casGcCommand =
@@ -199,3 +199,12 @@ casGcCommand =
 casFsverityCommand :: Mod CommandFields CasCommand
 casFsverityCommand =
   command "fsverity" (info (pure CasFsverity) (progDesc "Enable fs-verity on all CAS objects"))
+
+casVerifyCommand :: Mod CommandFields CasCommand
+casVerifyCommand =
+  command
+    "verify"
+    ( info
+        (CasVerify <$> argument positiveInt (metavar "ID"))
+        (progDesc "Verify fsverity status of a deployment")
+    )

@@ -69,6 +69,12 @@ assembleAction parser = do
         inhibit
         (return Nothing)
         (\msgCont _dep -> Ascas.fsverityAssembly conf0 msgCont)
+    Cli.Cas (Cli.CasVerify x) ->
+      Asm.withRootful
+        conf0
+        inhibit
+        (Just <$> Dep.getDeployment x conf0)
+        (Ascas.verifyAssembly conf0)
     Cli.Status c -> Status.printDepStati conf0 c
     Cli.Diff x y -> Diff.printDiff x y conf0
   where
