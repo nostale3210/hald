@@ -15,7 +15,7 @@ import UnliftIO.Async (pooledMapConcurrently)
 getDeploymentDigest :: Config.Config -> Dep.Deployment -> IO (Maybe BS.ByteString)
 getDeploymentDigest conf dep = do
   case Dep.backend dep of
-    Dep.Hardlink -> return $ Just BS.empty
+    Dep.Hardlink -> return Nothing
     Dep.Cas -> case Dep.rootDir dep of
       Nothing -> return Nothing
       Just root ->
