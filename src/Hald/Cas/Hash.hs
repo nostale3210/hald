@@ -1,4 +1,4 @@
-module Hald.Cas.Hash (hashFile) where
+module Hald.Cas.Hash (hashFile, hashByteString) where
 
 import BLAKE3 qualified as B3
 import Data.ByteString qualified as BS
@@ -11,6 +11,9 @@ hashFile :: FilePath -> IO String
 hashFile path = withFile path ReadMode $ \h -> do
   digest <- hReadHash h (B3.init Nothing)
   return $ show digest
+
+hashByteString :: BS.ByteString -> B3.Digest B3.DEFAULT_DIGEST_LEN
+hashByteString = B3.hash Nothing . pure
 
 hReadHash :: Handle -> B3.Hasher -> IO (B3.Digest B3.DEFAULT_DIGEST_LEN)
 hReadHash h !hasher = do
