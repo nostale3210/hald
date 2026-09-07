@@ -5,6 +5,7 @@ import Data.ByteString.Char8 qualified as B8
 import Data.HashSet qualified as HashSet
 import Data.List (sortOn)
 import Hald.Cas.AssetMap qualified as AssetMap
+import Hald.Cas.Hash qualified as Hash
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
@@ -12,7 +13,7 @@ import Hald.Util qualified as Util
 import System.FilePath ((</>))
 import UnliftIO.Async (pooledMapConcurrently)
 
-getDeploymentDigest :: Config.Config -> Dep.Deployment -> IO (Maybe BS.ByteString)
+getDeploymentDigest :: Config.Config -> Dep.Deployment -> IO (Maybe String)
 getDeploymentDigest conf dep = do
   case Dep.backend dep of
     Dep.Hardlink -> return Nothing
@@ -25,7 +26,7 @@ getDeploymentDigest conf dep = do
             Just am -> do
               let objects = sortOn B8.unpack $ HashSet.toList (AssetMap.referencedObjects am)
               results <- pooledMapConcurrently verifyObject objects
-              return $ fmap BS.concat . sequence $ results
+              return $ fmap (show . Hash.hashByteString . BS.concat) . sequence $ results
   where
     verifyObject obj = do
       let path = Config.haldPath conf </> "objects" </> B8.unpack obj

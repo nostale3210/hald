@@ -2,7 +2,6 @@ module Hald.Assemble.Cas (gcAssembly, fsverityAssembly, verifyAssembly) where
 
 import Hald.Assemble.Common qualified as Asm
 import Hald.Cas.Gc qualified as CasGc
-import Hald.Cas.Hash qualified as Hash
 import Hald.Cas.Verify qualified as CasVer
 import Hald.Config qualified as Config
 import Hald.Deployment qualified as Dep
@@ -37,4 +36,4 @@ verifyAssembly conf msgCont dep = do
         ("Couldn't verify integrity of deployment " <> show (Dep.identifier dep) <> "!")
         (Config.interactive conf)
         >> exitFailure
-    Just hash -> Util.printInfo ("Digest: " <> show (Hash.hashByteString hash)) $ Config.interactive conf
+    Just hash -> Util.printInfo ("Digest: " <> hash) $ Config.interactive conf
