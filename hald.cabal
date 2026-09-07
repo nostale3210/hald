@@ -34,6 +34,7 @@ executable hald
     Hald.Cas.Gc
     Hald.Cas.Hash
     Hald.Cas.Ingest
+    Hald.Cas.Verify
     Hald.Cli
     Hald.Config
     Hald.Container
