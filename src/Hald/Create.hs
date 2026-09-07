@@ -242,19 +242,22 @@ placeBootFiles conf deployment = do
       copyFile initrd (x <> "/initramfs.img")
     Nothing -> Util.fatal $ "No boot directory supplied for deployment " <> show (Dep.identifier deployment)
 
-installUki :: Config.Config -> Dep.Deployment -> IO ()
-installUki conf deployment = do
+installUki :: Config.Config -> Dep.Deployment -> Maybe String -> IO ()
+installUki conf deployment mDigest = do
   (kernel, initrd) <- fetchKernelInitrd conf deployment
   templCmdline <-
     Util.ioOrDie "Reading UKI cmdline"
       $ readFile
       $ Config.configPath conf <> "/cmdline"
-  let cmdline =
+  let base =
         Util.removeString "\n" $
           Util.replaceString
             "INSERT_DEPLOYMENT"
             (show $ Dep.identifier deployment)
             templCmdline
+      cmdline = case mDigest of
+        Nothing -> base
+        Just h -> base <> " hald.digest=" <> h
   Util.printInfo ("UKI cmdline: " <> cmdline) (Config.interactive conf)
   let bootComps = Dep.bootComponents deployment
   case Dep.ukiPath bootComps of

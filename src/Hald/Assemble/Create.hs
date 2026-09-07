@@ -6,6 +6,7 @@ import Hald.Assemble.Activate qualified as Asac
 import Hald.Assemble.Common qualified as Asm
 import Hald.Assemble.Gc qualified as Asgc
 import Hald.Cas.Gc qualified as CasGc
+import Hald.Cas.Verify qualified as CasVer
 import Hald.Config qualified as Config
 import Hald.Container qualified as Container
 import Hald.Create qualified as Create
@@ -70,7 +71,9 @@ deploymentCreationAssembly act build keep gc up se conf msgCont newDep sb uki ha
 
     Util.printProgress msgCont "Placing kernel and initramfs..."
     if uki
-      then Create.installUki pbConf newDep
+      then do
+        digest <- CasVer.getDeploymentDigest pbConf newDep
+        Create.installUki pbConf newDep digest
       else
         Create.placeBootFiles pbConf newDep
           >> Create.createBootEntry (Dep.identifier newDep) pbConf
