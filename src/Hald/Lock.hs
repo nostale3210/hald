@@ -4,13 +4,14 @@ module Hald.Lock where
 
 import Control.Exception (IOException, bracket, catch)
 import Control.Monad (unless, void, when)
-import Data.Word (Word64)
+import Data.ByteString qualified as BS
+import Data.Word (Word16, Word64)
 import Foreign.C.Error (Errno (..), eEXIST, eNOSYS, eNOTTY, eOPNOTSUPP, getErrno)
 import Foreign.C.String (CString, withCString)
 import Foreign.C.Types (CInt (..), CLong (..), CUInt (..), CULong (..))
 import Foreign.Marshal.Alloc (alloca, allocaBytes)
 import Foreign.Marshal.Utils (fillBytes)
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, castPtr, plusPtr)
 import Foreign.Storable (poke, pokeByteOff)
 import Hald.Mount qualified as Mount
 import Hald.Util (TreeAction (..), WalkStrategy (..))
@@ -76,6 +77,9 @@ foreign import capi "sys/ioctl.h ioctl"
 
 foreign import capi "linux/fsverity.h value FS_IOC_ENABLE_VERITY"
   fsIocEnableVerity :: CULong
+
+foreign import capi "linux/fsverity.h value FS_IOC_MEASURE_VERITY"
+  fsIocMeasureVerity :: CULong
 
 foreign import capi "sys/ioctl.h ioctl"
   c_ioctl_ptr :: CInt -> CULong -> Ptr () -> IO CInt
@@ -147,4 +151,22 @@ enableFsVerity path =
     errnoCode (Errno n) = fromIntegral n
     closeWhenOpen fd
       | fd >= 0 = void $ c_close fd
-      | otherwise = pure ()
+      | otherwise = return ()
+
+measureFsVerity :: FilePath -> IO (Maybe BS.ByteString)
+measureFsVerity path =
+  bracket (openRead path) c_close $ \fd ->
+    if fd < 0
+      then return Nothing
+      else allocaBytes 36 $ \arg -> do
+        fillBytes arg 0 36
+        pokeByteOff arg 0 verityVersion
+        pokeByteOff arg 2 digestSize
+        r <- c_ioctl_ptr fd fsIocMeasureVerity arg
+        if r == 0
+          then Just <$> BS.packCStringLen (castPtr (arg `plusPtr` 4), 32)
+          else return Nothing
+  where
+    verityVersion = 1 :: Word16
+    digestSize = 32 :: Word16
+    openRead p = withCString p $ \c -> c_open c 0
