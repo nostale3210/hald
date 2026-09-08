@@ -51,12 +51,12 @@ assembleAction parser = do
         inhibit
         (return Nothing)
         (\msgCont _dep -> Asgc.deploymentGcAssembly conf0 msgCont)
-    Cli.Activate x ->
+    Cli.Activate x mdigest ->
       Asm.withRootful
         conf0
         inhibit
         (Just <$> Dep.getDeployment x conf0)
-        (Asac.deploymentActivationAssembly conf0)
+        (Asac.deploymentActivationAssembly conf0 mdigest)
     Cli.Cas Cli.CasGc ->
       Asm.withRootfulAssembly
         conf0

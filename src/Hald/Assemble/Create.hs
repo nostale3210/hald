@@ -104,7 +104,7 @@ deploymentCreationAssembly act build keep gc up se conf msgCont newDep sb uki ha
     Util.printProgress msgCont "Setting default bootloader entry..."
     Create.setDefaultBootEntry (Dep.identifier newDep)
 
-    when act $ Asac.deploymentActivationAssembly pbConf msgCont newDep
+    when act $ Asac.deploymentActivationAssembly pbConf Nothing msgCont newDep
 
     when gc $ performGC >> Asgc.deploymentGcAssembly pbConf msgCont
 

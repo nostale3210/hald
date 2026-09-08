@@ -1,7 +1,6 @@
 module Hald.Config where
 
 import Control.Exception (IOException, catch)
-import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import Hald.Util qualified as Util
 import Text.Read (readMaybe)

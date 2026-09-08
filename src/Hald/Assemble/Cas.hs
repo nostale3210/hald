@@ -11,7 +11,6 @@ import Hald.Deployment qualified as Dep
 import Hald.Lock qualified as Lock
 import Hald.Pe qualified as Pe
 import Hald.Util qualified as Util
-import System.Exit (exitFailure)
 
 gcAssembly :: Config.Config -> Util.MessageContainer -> IO ()
 gcAssembly conf msgCont = do
@@ -33,32 +32,37 @@ verifyAssembly conf msgCont dep = do
     "Verifying integrity of deployment "
       <> show (Dep.identifier dep)
       <> "..."
-  verifyDigest conf dep
+  verifyDigest conf dep Nothing
 
-verifyDigest :: Config.Config -> Dep.Deployment -> IO ()
-verifyDigest conf newDep = do
+verifyDigest :: Config.Config -> Dep.Deployment -> Maybe String -> IO ()
+verifyDigest conf newDep mdigest = do
   let interactive = Config.interactive conf
-  case Dep.ukiPath (Dep.bootComponents newDep) of
-    Nothing -> return ()
-    Just ukiPath -> do
-      mCmdline <- Pe.extractCmdline ukiPath
-      case mCmdline of
-        Nothing ->
-          Util.printInfo "No .cmdline section found in UKI, skipping verification" interactive
-        Just cmdline ->
-          case extractDigestParam cmdline of
-            Nothing ->
-              Util.printInfo "No hald.digest= parameter in cmdline, skipping verification" interactive
-            Just expected -> do
-              Util.printInfo ("Expected deployment digest: " <> expected) interactive
-              mCurrent <- CasVer.getDeploymentDigest conf newDep
-              case mCurrent of
-                Nothing ->
-                  Util.fatal "Couldn't calculate deployment digest, but one is expected"
-                Just actual -> do
-                  Util.printInfo ("Deployment digest: " <> actual) interactive
-                  when (expected /= actual) $
-                    Util.fatal "Deployment digest mismatch"
-                  Util.printInfo "Digest verification successful" interactive
+      bootContext = Config.rootDir conf /= ""
+      safeDigest = if bootContext then mdigest else Nothing
+  case safeDigest of
+    Just d -> verify newDep d interactive
+    Nothing -> case Dep.ukiPath (Dep.bootComponents newDep) of
+      Nothing -> return ()
+      Just ukiPath -> do
+        extCmdline <- Pe.extractCmdline ukiPath
+        case extCmdline of
+          Nothing -> Util.printInfo "No .cmdline section found in UKI, skipping verification" interactive
+          Just cmdline ->
+            case extractDigestParam cmdline of
+              Nothing ->
+                Util.printInfo "No hald.digest= parameter in cmdline, skipping verification" interactive
+              Just expected ->
+                verify newDep expected interactive
   where
     extractDigestParam = listToMaybe . map (drop 12) . filter (isPrefixOf "hald.digest=") . words
+    verify dep expected interactive = do
+      Util.printInfo ("Expected deployment digest: " <> expected) interactive
+      mCurrent <- CasVer.getDeploymentDigest conf dep
+      case mCurrent of
+        Nothing ->
+          Util.fatal "Couldn't calculate deployment digest, but one is expected"
+        Just actual -> do
+          Util.printInfo ("Deployment digest: " <> actual) interactive
+          when (expected /= actual) $
+            Util.fatal "Deployment digest mismatch"
+          Util.printInfo "Digest verification successful" interactive

@@ -19,6 +19,7 @@ import Options.Applicative
     long,
     metavar,
     option,
+    optional,
     progDesc,
     short,
     strOption,
@@ -54,7 +55,7 @@ data Command
         casFlag :: Bool,
         hardlinkFlag :: Bool
       }
-  | Activate Int
+  | Activate Int (Maybe String)
   | Status Bool
   | Diff Int Int
   | Rm Int
@@ -163,7 +164,9 @@ activateCommand =
 
 activateOptions :: Parser Command
 activateOptions =
-  Activate <$> argument positiveInt (metavar "ID")
+  Activate
+    <$> argument positiveInt (metavar "ID")
+    <*> optional (strOption (long "digest" <> help "Deployment digest when UKI extraction is unavailable"))
 
 statusCommand :: Mod CommandFields Command
 statusCommand =

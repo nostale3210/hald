@@ -8,8 +8,10 @@ sysroot="$1"
 hald_boot=$(getarg hald.boot)
 [ -z "$hald_boot" ] && printf "No deployment specified! Exiting!\n" && exit 0
 
+hald_digest=$(getarg hald.digest)
+
 mount -o remount,rw "$sysroot"
 [ ! -d "$sysroot/usr" ] && chattr -i "$sysroot/" && mkdir -p "$sysroot/usr"
 [ ! -d "$sysroot/etc" ] && chattr -i "$sysroot/" && mkdir -p "$sysroot/etc"
 
-hald activate "$hald_boot" --rootd "$sysroot"
+hald activate "$hald_boot" "${hald_digest:+--digest="$hald_digest"}" --rootd "$sysroot"

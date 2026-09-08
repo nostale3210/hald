@@ -8,11 +8,11 @@ import Hald.Deployment qualified as Dep
 import Hald.Mount qualified as Mount
 import Hald.Util qualified as Util
 
-deploymentActivationAssembly :: Config.Config -> Util.MessageContainer -> Dep.Deployment -> IO ()
-deploymentActivationAssembly conf msgCont newDep = do
+deploymentActivationAssembly :: Config.Config -> Maybe String -> Util.MessageContainer -> Dep.Deployment -> IO ()
+deploymentActivationAssembly conf mdigest msgCont newDep = do
   Util.printInfo ("Activating deployment " <> show (Dep.identifier newDep) <> "...") (Util.interactive msgCont)
   Util.printProgress msgCont ("Activating deployment " <> show (Dep.identifier newDep) <> "...")
-  Ascas.verifyDigest conf newDep
+  Ascas.verifyDigest conf newDep mdigest
   Activate.ensureOverlayEmptyDir (Config.haldPath conf)
   haldMounted <- Mount.isMountpoint (Config.haldPath conf)
   unless
