@@ -2,7 +2,7 @@ module Hald.Assemble.Cas (gcAssembly, fsverityAssembly, verifyAssembly, verifyDi
 
 import Control.Monad (when)
 import Data.List (isPrefixOf)
-import Data.Maybe (listToMaybe)
+import Data.Maybe (isJust, listToMaybe)
 import Hald.Assemble.Common qualified as Asm
 import Hald.Cas.Gc qualified as CasGc
 import Hald.Cas.Verify qualified as CasVer
@@ -37,8 +37,10 @@ verifyAssembly conf msgCont dep = do
 verifyDigest :: Config.Config -> Dep.Deployment -> Maybe String -> IO ()
 verifyDigest conf newDep mdigest = do
   let interactive = Config.interactive conf
-      bootContext = Config.rootDir conf /= ""
+      bootContext = Config.rootDir conf /= "" && Config.rootDir conf /= "/"
       safeDigest = if bootContext then mdigest else Nothing
+  when (not bootContext && isJust mdigest) $
+    Util.printInfo "Ignoring cmdline digest" interactive
   case safeDigest of
     Just d -> verify newDep d interactive
     Nothing -> case Dep.ukiPath (Dep.bootComponents newDep) of
@@ -49,18 +51,15 @@ verifyDigest conf newDep mdigest = do
           Nothing -> Util.printInfo "No .cmdline section found in UKI, skipping verification" interactive
           Just cmdline ->
             case extractDigestParam cmdline of
-              Nothing ->
-                Util.printInfo "No hald.digest= parameter in cmdline, skipping verification" interactive
-              Just expected ->
-                verify newDep expected interactive
+              Nothing -> Util.printInfo "No hald.digest= parameter in cmdline, skipping verification" interactive
+              Just expected -> verify newDep expected interactive
   where
     extractDigestParam = listToMaybe . map (drop 12) . filter (isPrefixOf "hald.digest=") . words
     verify dep expected interactive = do
-      Util.printInfo ("Expected deployment digest: " <> expected) interactive
+      Util.printInfo ("Expected digest: " <> expected) interactive
       mCurrent <- CasVer.getDeploymentDigest conf dep
       case mCurrent of
-        Nothing ->
-          Util.fatal "Couldn't calculate deployment digest, but one is expected"
+        Nothing -> Util.fatal "Couldn't calculate deployment digest, but one is expected"
         Just actual -> do
           Util.printInfo ("Deployment digest: " <> actual) interactive
           when (expected /= actual) $
