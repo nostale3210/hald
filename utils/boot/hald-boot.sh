@@ -14,4 +14,8 @@ mount -o remount,rw "$sysroot"
 [ ! -d "$sysroot/usr" ] && chattr -i "$sysroot/" && mkdir -p "$sysroot/usr"
 [ ! -d "$sysroot/etc" ] && chattr -i "$sysroot/" && mkdir -p "$sysroot/etc"
 
-hald activate "$hald_boot" "${hald_digest:+--digest="$hald_digest"}" --rootd "$sysroot"
+if [ -n "$hald_digest" ]; then
+  hald activate "$hald_boot" --digest "$hald_digest" --rootd "$sysroot"
+else
+  hald activate "$hald_boot" --rootd "$sysroot"
+fi
